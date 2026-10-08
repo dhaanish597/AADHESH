@@ -25,7 +25,7 @@ from aadesh_adapters.corpus.local_file import LocalFileCorpus
 from aadesh_core.domain import ObligationStatus, Principal, Provenance, SiteProfile
 from aadesh_core.errors import IllegalParchiTransition
 from aadesh_core.explanation import check_explanation, context_for, explain_set
-from aadesh_core.parchi import acknowledge, issue, open_parchi
+from aadesh_core.parchi import acknowledge, issue, open_parchi, seal
 from aadesh_core.ports.authz import AuthzResource, EntityRef
 from aadesh_core.resolver import resolve_obligations
 from aadesh_core.stages import derive_implied_stage
@@ -33,6 +33,10 @@ from tests.support.corpus_builder import CorpusBuilder
 
 NOW = datetime(2026, 10, 8, 9, 30, tzinfo=UTC)
 LATER = datetime(2026, 10, 8, 11, 0, tzinfo=UTC)
+
+#: `NOW` as epoch seconds. Cedar core has no clock, so the authorization request states the
+#: instant and the policy compares consent windows against it.
+EPOCH_NOW = int(NOW.timestamp())
 
 PAGE_TEXT = (
     "4. All dust generating construction and demolition activities shall remain "
@@ -159,6 +163,7 @@ def test_full_chain_from_cited_corpus_to_sealed_parchi(sourced_corpus, reading, 
         principal=SUPERVISOR,
         action="IssueHalt",
         resource=AuthzResource("Site", "site-001", {"siteId": "site-001"}),
+        context={"now": EPOCH_NOW},
     ).allowed
 
     # 3. a parchi opens for the worker and awaits THEM
@@ -184,20 +189,32 @@ def test_full_chain_from_cited_corpus_to_sealed_parchi(sourced_corpus, reading, 
         {
             "worker": EntityRef("Principal", "wrk-1"),
             "siteId": "site-001",
-            "sharedForAssistance": False,
+            "state": "pending_ack",
         },
     )
 
     # 4. Cedar forbids the supervisor from finishing it on the worker's behalf
-    denial = authz.authorize(principal=SUPERVISOR, action="AckParchi", resource=resource)
+    denial = authz.authorize(
+        principal=SUPERVISOR,
+        action="AcknowledgeOwnParchi",
+        resource=resource,
+        context={"now": EPOCH_NOW},
+    )
     assert denial.allowed is False
     assert denial.policy_id == "no-proxy-acknowledgement"
     with pytest.raises(IllegalParchiTransition):
         acknowledge(parchi, actor_worker_id=SUPERVISOR.principal_id, now=LATER)
 
     # 5. the worker acknowledges their own, and it seals
-    assert authz.authorize(principal=WORKER, action="AckParchi", resource=resource).allowed
-    sealed = acknowledge(parchi, actor_worker_id="wrk-1", now=LATER)
+    assert authz.authorize(
+        principal=WORKER,
+        action="AcknowledgeOwnParchi",
+        resource=resource,
+        context={"now": EPOCH_NOW},
+    ).allowed
+    acknowledged = acknowledge(parchi, actor_worker_id="wrk-1", now=LATER)
+    assert acknowledged.acknowledged_by == "wrk-1"
+    sealed = seal(acknowledged, now=LATER)
     assert sealed.content_hash is not None
     assert sealed.order_sha256 == result_set.stage.order_sha256
 

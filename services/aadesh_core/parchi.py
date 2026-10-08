@@ -1,20 +1,24 @@
 """Parchi (पर्ची) -- the slip a displaced worker ends up holding, and its lifecycle.
 
 ```
-DRAFT --issue--> PENDING_ACK --acknowledge--> SEALED  (terminal, immutable)
-  |                   |
-  +------void---------+--> VOID                       (terminal)
+DRAFT --issue--> PENDING_ACK --acknowledge--> ACKNOWLEDGED --seal--> SEALED  (terminal)
+  |                   |                             |
+  +------void---------+------------void-------------+--> VOID                (terminal)
 ```
 
-Two rules are load-bearing and both are enforced here as well as at the authorization
+Three rules are load-bearing and all three are enforced here as well as at the authorization
 boundary:
 
   * **Only the worker named on the parchi may acknowledge it.** A halt record is incomplete
     until the people it displaced have confirmed it themselves. Cedar denies proxy
     acknowledgement at the boundary; this module refuses it again, because a rule checked in
     exactly one place is one refactor away from not existing.
+  * **Acknowledging and sealing are different acts.** ACKNOWLEDGED is the worker's
+    confirmation; SEALED is the system freezing the record over a content hash. Keeping them
+    apart is what makes "confirmed at T1" and "frozen at T2" separately provable.
   * **SEALED is terminal.** Sealing computes a content hash over the evidentiary fields.
-    Evidence that can be edited afterwards is not evidence.
+    Evidence that can be edited afterwards is not evidence. There is deliberately no `edit`,
+    `update` or `amend` here: a correction is a new event, never a mutation of the record.
 
 Every transition returns a NEW parchi. Nothing here mutates.
 """
@@ -27,8 +31,18 @@ from collections.abc import Sequence
 from dataclasses import dataclass, replace
 from datetime import datetime
 
-from aadesh_core.domain import InvokedStage, ParchiState, Provenance, StationReading
+from aadesh_core.domain import (
+    AcknowledgementMethod,
+    InvokedStage,
+    ParchiState,
+    Provenance,
+    StationReading,
+)
 from aadesh_core.errors import IllegalParchiTransition
+
+PARCHI_SCHEMA_VERSION = "parchi/2"
+"""Bumped from the acknowledged/sealed split. Sealed records state the version they were
+frozen under, so a later reader can tell which shape of evidence they are holding."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -58,6 +72,31 @@ class Parchi:
     shared_for_assistance: bool = False
     void_reason: str | None = None
 
+    # --- Prompt 5: the workflow, acknowledgement and idempotency provenance -----
+    workflow_execution_id: str | None = None
+    """The standing-order / workflow execution that opened this parchi. None for a parchi
+    opened by hand, which is honest rather than a guessed id."""
+
+    source_event_id: str | None = None
+    """The event that caused it. Carried through unchanged, never recomputed."""
+
+    acknowledgement_method: AcknowledgementMethod | None = None
+    """Set only by the worker's own explicit confirm. Opening or scanning is not a method."""
+
+    acknowledgement_token_ref: str | None = None
+    """A HASH-derived handle for the acknowledgement token, for audit correlation. The raw
+    token is deliberately not representable on this record."""
+
+    acknowledgement_event_id: str | None = None
+    """The id of the ParchiAcknowledged event, so a replay can return the ORIGINAL event
+    rather than minting a second one."""
+
+    idempotency_key: str | None = None
+    """The key creation was deduplicated on. Preserved so a caller can prove which key
+    produced this parchi."""
+
+    schema_version: str = PARCHI_SCHEMA_VERSION
+
     @property
     def provenance(self) -> Provenance | None:
         """Mirrors the reading. There is no independent setter, so it cannot be relabelled."""
@@ -75,6 +114,23 @@ class Parchi:
     def is_terminal(self) -> bool:
         return self.state in (ParchiState.SEALED, ParchiState.VOID)
 
+    @property
+    def source_document_ids(self) -> tuple[str, ...]:
+        """The documents this record rests on, derived rather than stored.
+
+        Derived on purpose: a second stored copy could drift from the stage it came from,
+        and then the evidence would list a source it does not actually cite.
+        """
+        if self.stage is None:
+            return ()
+        return (self.stage.order_doc_id,)
+
+    @property
+    def source_hashes(self) -> tuple[str, ...]:
+        """The hashes proving those documents are the bytes relied on. Derived, for the same
+        reason as `source_document_ids`."""
+        return (self.order_sha256,) if self.order_sha256 else ()
+
 
 def _require_state(parchi: Parchi, expected: ParchiState, action: str) -> None:
     if parchi.state is not expected:
@@ -89,11 +145,20 @@ def _evidentiary_payload(parchi: Parchi) -> dict:
 
     Deliberately excludes `shared_for_assistance`: a worker later opting in to help must not
     invalidate the hash of a record that is already sealed.
+
+    Deliberately INCLUDES every acknowledgement field and the workflow/idempotency
+    provenance, because those are the claims the record is evidence FOR. A hash that did not
+    cover them would let someone freeze a record and then assert a different acknowledging
+    worker or a different originating execution.
     """
     return {
         "parchi_id": parchi.parchi_id,
         "site_id": parchi.site_id,
         "worker_id": parchi.worker_id,
+        "schema_version": parchi.schema_version,
+        "workflow_execution_id": parchi.workflow_execution_id,
+        "source_event_id": parchi.source_event_id,
+        "idempotency_key": parchi.idempotency_key,
         "stage": None if parchi.stage is None else parchi.stage.stage,
         "order_doc_id": None if parchi.stage is None else parchi.stage.order_doc_id,
         "order_sha256": parchi.order_sha256,
@@ -106,6 +171,11 @@ def _evidentiary_payload(parchi: Parchi) -> dict:
         if parchi.acknowledged_at is None
         else parchi.acknowledged_at.isoformat(),
         "acknowledged_by": parchi.acknowledged_by,
+        "acknowledgement_method": None
+        if parchi.acknowledgement_method is None
+        else parchi.acknowledgement_method.value,
+        "acknowledgement_token_ref": parchi.acknowledgement_token_ref,
+        "acknowledgement_event_id": parchi.acknowledgement_event_id,
         "reading": None
         if parchi.reading is None
         else {
@@ -138,6 +208,9 @@ def open_parchi(
     readiness_checklist: Sequence[str],
     displaced_worker_days: int,
     now: datetime,
+    workflow_execution_id: str | None = None,
+    source_event_id: str | None = None,
+    idempotency_key: str | None = None,
 ) -> Parchi:
     """Create a DRAFT parchi.
 
@@ -157,6 +230,9 @@ def open_parchi(
         entitlement_refs=tuple(entitlement_refs),
         readiness_checklist=tuple(readiness_checklist),
         displaced_worker_days=displaced_worker_days,
+        workflow_execution_id=workflow_execution_id,
+        source_event_id=source_event_id,
+        idempotency_key=idempotency_key,
     )
 
 
@@ -166,8 +242,22 @@ def issue(parchi: Parchi, *, now: datetime) -> Parchi:
     return replace(parchi, state=ParchiState.PENDING_ACK, issued_at=now)
 
 
-def acknowledge(parchi: Parchi, *, actor_worker_id: str, now: datetime) -> Parchi:
-    """PENDING_ACK -> SEALED, but only at the hand of the worker named on the parchi."""
+def acknowledge(
+    parchi: Parchi,
+    *,
+    actor_worker_id: str,
+    now: datetime,
+    method: AcknowledgementMethod = AcknowledgementMethod.QR_CONFIRMED,
+    token_ref: str | None = None,
+    event_id: str | None = None,
+) -> Parchi:
+    """PENDING_ACK -> ACKNOWLEDGED, and only at the hand of the worker named on the parchi.
+
+    This records the confirmation. It does not seal; `seal` does that, and only once this
+    has happened. `token_ref` must be the hash-derived handle, never a raw token -- the
+    caller is responsible for that, and `aadesh_core.parchi_ack.tokens` never hands out a
+    raw token for anything but display.
+    """
     _require_state(parchi, ParchiState.PENDING_ACK, "acknowledge")
 
     if actor_worker_id != parchi.worker_id:
@@ -177,14 +267,27 @@ def acknowledge(parchi: Parchi, *, actor_worker_id: str, now: datetime) -> Parch
             f"A halt record is incomplete until the worker confirms it themselves."
         )
 
-    acknowledged = replace(
+    return replace(
         parchi,
-        state=ParchiState.SEALED,
+        state=ParchiState.ACKNOWLEDGED,
         acknowledged_at=now,
         acknowledged_by=actor_worker_id,
-        sealed_at=now,
+        acknowledgement_method=method,
+        acknowledgement_token_ref=token_ref,
+        acknowledgement_event_id=event_id,
     )
-    return replace(acknowledged, content_hash=compute_content_hash(acknowledged))
+
+
+def seal(parchi: Parchi, *, now: datetime) -> Parchi:
+    """ACKNOWLEDGED -> SEALED. Freezes the record over a content hash.
+
+    Sealing is deliberately NOT reachable from PENDING_ACK. If it were, a supervisor could
+    produce a sealed parchi that no worker ever confirmed, which is precisely the thing the
+    parchi exists to make impossible.
+    """
+    _require_state(parchi, ParchiState.ACKNOWLEDGED, "seal")
+    sealed = replace(parchi, state=ParchiState.SEALED, sealed_at=now)
+    return replace(sealed, content_hash=compute_content_hash(sealed))
 
 
 def void(parchi: Parchi, *, reason: str, now: datetime) -> Parchi:

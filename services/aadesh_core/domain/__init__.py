@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from aadesh_core.domain.enums import (
+    AcknowledgementMethod,
     InvocationLifecycle,
     ObligationStatus,
     ParchiState,
@@ -36,6 +37,7 @@ __all__ = [
     "CONSTRUCTION_SITE",
     "MISSING_FACT",
     "UNKNOWN_FACT",
+    "AcknowledgementMethod",
     "Citation",
     "Entitlement",
     "EntitlementAmount",

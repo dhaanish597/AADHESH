@@ -11,6 +11,8 @@ The name is deliberately hard to read past in a diff.
 from __future__ import annotations
 
 import os
+from collections.abc import Mapping
+from typing import Any
 
 from aadesh_core.domain import Principal
 from aadesh_core.errors import TestOnlyComponentInProduction
@@ -32,7 +34,12 @@ class AllowAllTestOnly:
             )
 
     def authorize(
-        self, *, principal: Principal, action: str, resource: AuthzResource
+        self,
+        *,
+        principal: Principal,
+        action: str,
+        resource: AuthzResource,
+        context: Mapping[str, Any] | None = None,
     ) -> AuthorizationDecision:
         return AuthorizationDecision(
             allowed=True,

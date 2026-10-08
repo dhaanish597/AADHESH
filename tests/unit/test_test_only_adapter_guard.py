@@ -43,7 +43,7 @@ def test_it_really_does_allow_everything(monkeypatch):
     """Proves the guard is protecting against a real hazard, not a hypothetical one."""
     monkeypatch.setenv("AADESH_ENV", "test")
     provider = AllowAllTestOnly()
-    for action in ["AckParchi", "ViewParchi", "IssueHalt", "AssistClaim"]:
+    for action in ["AcknowledgeOwnParchi", "ViewParchi", "IssueHalt", "AssistClaim"]:
         decision = provider.authorize(principal=ANY_PRINCIPAL, action=action, resource=ANY_RESOURCE)
         assert decision.allowed is True
 
@@ -51,6 +51,6 @@ def test_it_really_does_allow_everything(monkeypatch):
 def test_its_decisions_are_labelled_as_unsafe(monkeypatch):
     monkeypatch.setenv("AADESH_ENV", "test")
     decision = AllowAllTestOnly().authorize(
-        principal=ANY_PRINCIPAL, action="AckParchi", resource=ANY_RESOURCE
+        principal=ANY_PRINCIPAL, action="AcknowledgeOwnParchi", resource=ANY_RESOURCE
     )
     assert "test" in decision.reason.lower()

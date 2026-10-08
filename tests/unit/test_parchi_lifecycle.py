@@ -18,10 +18,11 @@ import pytest
 
 from aadesh_core.domain import ParchiState, Provenance
 from aadesh_core.errors import IllegalParchiTransition
-from aadesh_core.parchi import acknowledge, issue, open_parchi, void
+from aadesh_core.parchi import acknowledge, issue, open_parchi, seal, void
 from tests.support.builders import FIXED_NOW, invoked_stage, reading
 
 LATER = FIXED_NOW.replace(hour=11)
+SEAL_TIME = FIXED_NOW.replace(hour=12)
 
 
 def a_draft(**over):
@@ -43,8 +44,12 @@ def a_pending():
     return issue(a_draft(), now=FIXED_NOW)
 
 
-def a_sealed():
+def an_acknowledged():
     return acknowledge(a_pending(), actor_worker_id="worker-001", now=LATER)
+
+
+def a_sealed():
+    return seal(an_acknowledged(), now=SEAL_TIME)
 
 
 # --- the happy path --------------------------------------------------------
@@ -58,12 +63,24 @@ def test_issue_moves_draft_to_pending_ack():
     assert issue(a_draft(), now=FIXED_NOW).state is ParchiState.PENDING_ACK
 
 
-def test_worker_acknowledging_their_own_parchi_seals_it():
-    sealed = a_sealed()
+def test_worker_acknowledging_their_own_parchi_acknowledges_then_seals_it():
+    """Acknowledging and sealing are two acts, and both are recorded.
+
+    The original assertion -- that a worker's own acknowledgement is what carries a parchi
+    to a sealed record -- still holds. What changed is that the two moments are now
+    separately observable instead of sharing one timestamp.
+    """
+    acknowledged = an_acknowledged()
+    assert acknowledged.state is ParchiState.ACKNOWLEDGED
+    assert acknowledged.acknowledged_at == LATER
+    assert acknowledged.acknowledged_by == "worker-001"
+    assert acknowledged.sealed_at is None
+
+    sealed = seal(acknowledged, now=SEAL_TIME)
     assert sealed.state is ParchiState.SEALED
+    assert sealed.sealed_at == SEAL_TIME
     assert sealed.acknowledged_at == LATER
     assert sealed.acknowledged_by == "worker-001"
-    assert sealed.sealed_at == LATER
 
 
 def test_sealing_computes_a_content_hash():
@@ -77,10 +94,13 @@ def test_content_hash_is_deterministic():
 
 
 def test_content_hash_changes_when_evidentiary_content_differs():
-    other = acknowledge(
-        issue(a_draft(parchi_id="parchi-002"), now=FIXED_NOW),
-        actor_worker_id="worker-001",
-        now=LATER,
+    other = seal(
+        acknowledge(
+            issue(a_draft(parchi_id="parchi-002"), now=FIXED_NOW),
+            actor_worker_id="worker-001",
+            now=LATER,
+        ),
+        now=SEAL_TIME,
     )
     assert a_sealed().content_hash != other.content_hash
 

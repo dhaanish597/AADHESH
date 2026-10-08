@@ -56,8 +56,24 @@ class AuthorizationProvider(Protocol):
 
     Implementations MUST fail closed: if a decision cannot be reached, raise
     AuthorizationUnavailable rather than returning allowed=True.
+
+    `context` carries facts about the REQUEST rather than about any entity -- today, the
+    instant the request is being decided at, as epoch seconds under the key `now`. It exists
+    because Cedar core has no clock: consent expiry and revocation are policy conditions, and
+    a policy can only compare against a time the caller supplies. Passing the instant in the
+    request (rather than pre-computing "is this consent live?" in Python) is what keeps the
+    rule inside the auditable policy set.
+
+    Callers MUST pass a `now`. Implementations MUST raise AuthorizationUnavailable when a
+    context needed by their policy set is absent, rather than evaluating a time-sensitive
+    rule against a missing value.
     """
 
     def authorize(
-        self, *, principal: Principal, action: str, resource: AuthzResource
+        self,
+        *,
+        principal: Principal,
+        action: str,
+        resource: AuthzResource,
+        context: Mapping[str, Any] | None = None,
     ) -> AuthorizationDecision: ...
