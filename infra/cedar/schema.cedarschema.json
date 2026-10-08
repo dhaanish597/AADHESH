@@ -10,10 +10,28 @@
           }
         }
       },
+      "Worker": {
+        "shape": {
+          "type": "Record",
+          "attributes": {
+            "workerId": { "type": "String", "required": true },
+            "siteId": { "type": "String", "required": true }
+          }
+        }
+      },
       "Site": {
         "shape": {
           "type": "Record",
           "attributes": {
+            "siteId": { "type": "String", "required": true }
+          }
+        }
+      },
+      "StandingOrderExecution": {
+        "shape": {
+          "type": "Record",
+          "attributes": {
+            "executionId": { "type": "String", "required": true },
             "siteId": { "type": "String", "required": true }
           }
         }
@@ -24,7 +42,26 @@
           "attributes": {
             "worker": { "type": "Entity", "name": "Principal", "required": true },
             "siteId": { "type": "String", "required": true },
-            "sharedForAssistance": { "type": "Boolean", "required": true }
+            "state": { "type": "String", "required": true },
+            "execution": {
+              "type": "Entity",
+              "name": "StandingOrderExecution",
+              "required": false
+            }
+          }
+        }
+      },
+      "ClaimAssistanceContext": {
+        "shape": {
+          "type": "Record",
+          "attributes": {
+            "worker": { "type": "Entity", "name": "Worker", "required": true },
+            "facilitator": { "type": "Entity", "name": "Principal", "required": true },
+            "parchi": { "type": "Entity", "name": "Parchi", "required": true },
+            "consentGranted": { "type": "Boolean", "required": true },
+            "grantedAt": { "type": "Long", "required": true },
+            "expiresAt": { "type": "Long", "required": true },
+            "revokedAt": { "type": "Long", "required": false }
           }
         }
       }
@@ -33,31 +70,61 @@
       "IssueHalt": {
         "appliesTo": {
           "principalTypes": ["Principal"],
-          "resourceTypes": ["Site"]
+          "resourceTypes": ["Site"],
+          "context": {
+            "type": "Record",
+            "attributes": { "now": { "type": "Long", "required": true } }
+          }
+        }
+      },
+      "ViewSiteExecution": {
+        "appliesTo": {
+          "principalTypes": ["Principal"],
+          "resourceTypes": ["Site"],
+          "context": {
+            "type": "Record",
+            "attributes": { "now": { "type": "Long", "required": true } }
+          }
         }
       },
       "CreateStandingOrder": {
         "appliesTo": {
           "principalTypes": ["Principal"],
-          "resourceTypes": ["Site"]
+          "resourceTypes": ["Site"],
+          "context": {
+            "type": "Record",
+            "attributes": { "now": { "type": "Long", "required": true } }
+          }
         }
       },
-      "AckParchi": {
+      "AcknowledgeOwnParchi": {
         "appliesTo": {
           "principalTypes": ["Principal"],
-          "resourceTypes": ["Parchi"]
+          "resourceTypes": ["Parchi"],
+          "context": {
+            "type": "Record",
+            "attributes": { "now": { "type": "Long", "required": true } }
+          }
         }
       },
       "ViewParchi": {
         "appliesTo": {
           "principalTypes": ["Principal"],
-          "resourceTypes": ["Parchi"]
+          "resourceTypes": ["Parchi"],
+          "context": {
+            "type": "Record",
+            "attributes": { "now": { "type": "Long", "required": true } }
+          }
         }
       },
       "AssistClaim": {
         "appliesTo": {
           "principalTypes": ["Principal"],
-          "resourceTypes": ["Parchi"]
+          "resourceTypes": ["ClaimAssistanceContext"],
+          "context": {
+            "type": "Record",
+            "attributes": { "now": { "type": "Long", "required": true } }
+          }
         }
       }
     }

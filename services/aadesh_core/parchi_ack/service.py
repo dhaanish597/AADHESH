@@ -208,6 +208,29 @@ def acknowledge_parchi(
     return replace(outcome, parchi=current, already_confirmed=already)
 
 
+def resolve_parchi_for_payload(
+    *,
+    payload: str,
+    now: datetime,
+    store: ParchiAckStore,
+    tokens: AcknowledgementTokenStore,
+) -> Parchi:
+    """The parchi a payload refers to, WITHOUT consuming the token or changing anything.
+
+    This is the read the authorization boundary needs: to ask "may this principal
+    acknowledge THIS parchi?" the caller must first know which parchi the link names. It
+    deliberately differs from `describe_pending_parchi` in one respect -- a token that has
+    already been used still resolves here. A replay must reach the authorization decision and
+    then the domain's identity check, exactly as a first attempt does; refusing it earlier
+    would mean a second caller presenting somebody else's used link got a token error instead
+    of a permission error, which is a different fact told to the wrong person.
+
+    Resolving is not using. Nothing is written, no state moves, and the token stays live.
+    """
+    token = _resolve_token(payload, now=now, tokens=tokens, allow_consumed=True)
+    return _parchi_for(token, store)
+
+
 def describe_pending_parchi(
     *,
     payload: str,

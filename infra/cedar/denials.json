@@ -5,5 +5,7 @@
 
   "assist-is-not-disclosure": "Cedar denied this: a facilitator can assist with a claim the worker shared, but cannot read the worker's record. Opting in to help is not opting in to disclosure.",
 
+  "assist-requires-live-consent": "Cedar denied this: assistance needs the worker's current consent. This one is not granted, has lapsed, or has been withdrawn by the worker.",
+
   "_default": "Cedar denied this: no policy permits that action on this resource for your role."
 }

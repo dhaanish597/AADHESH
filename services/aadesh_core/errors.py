@@ -110,6 +110,25 @@ class AuthorizationUnavailable(AadeshError):
     """
 
 
+class AuthorizationDenied(AadeshError):
+    """The authorization layer reached a decision, and it was "no".
+
+    Deliberately distinct from `AuthorizationUnavailable`: an outage and a refusal are
+    different facts calling for different responses (retry later, versus do not retry). A
+    handler maps this to a generic forbidden response and the outage to a service error.
+
+    `decision` is carried for logs and for tests -- it names the policy that refused, which is
+    what an operator needs in order to change the policy. It is NOT in the message. `str(exc)`
+    is one sentence, identical for every refusal, because a caller who can tell "you are the
+    wrong worker" apart from "no such parchi" has been handed an oracle for probing which
+    records exist.
+    """
+
+    def __init__(self, decision: object) -> None:
+        self.decision = decision
+        super().__init__("You do not have permission to perform this action.")
+
+
 class ExplanationContractViolation(AadeshError):
     """Generated prose breached its output contract and must not be shown to a user."""
 
