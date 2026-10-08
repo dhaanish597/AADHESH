@@ -197,3 +197,59 @@ primary screen, real claim filing, payments, or any government system integratio
 - **SAM CLI not installed** on the dev machine. Blocks `sam local`; does not block the core slice.
 - **Submission close time is contradictory** between the two source docs (8:00 AM vs 8:00 PM on
   11 Oct). Must be confirmed on the schedule page and Discord.
+
+---
+
+## 13. Addendum — 2026-10-08, written after implementation
+
+Four things changed while building the ingestion mechanism. Sections 1-12 above are left as
+approved; this records the deltas and why each was necessary.
+
+### 13.1 There is now one door into the corpus
+
+`aadesh-corpus` (aliased as `make corpus`) is the only sanctioned way to add a source document
+or a cited clause. `ingest` hashes the bytes you downloaded, stores them, extracts per-page
+text, and records the official URL and retrieval time. `add-obligation`, `add-entitlement`,
+`add-stage-band` and `invoke-stage` accept a clause **only** if its `quote` is found on the page
+it cites.
+
+The quote check and `make verify` call the same function. That is the load-bearing detail: a
+writer more lenient than the verifier would admit entries the gate later rejects, and a writer
+stricter than it would reject sound entries. `normalise` was promoted from a private helper in
+`verifier.py` to the public verification API for exactly this reason, and a test asserts that an
+entry the CLI accepts is an entry `make verify` proves.
+
+### 13.2 The invoked stage was outside the proof. It is not now.
+
+`invoked_stage.json` decides whether **any** obligation applies. Until now it was the one legal
+claim in the corpus that nothing re-proved: the loader checked only that the named order was in
+the manifest, never that the stage's own sentence existed anywhere.
+
+It is now a citation like every other — `source_doc`, `page`, `quote`, the same key names, so
+generic verification finds it without a special case — and it has a schema
+(`corpus_schemas/invoked_stage.schema.json`). `order_doc_id` was renamed to `source_doc`; the
+loader refuses the old key with a pointer to the new one rather than ignoring the field and
+leaving the stage silently unverified.
+
+The loader **refuses** an invoked stage it cannot re-prove. It does not degrade to `None`:
+`None` reads as "no stage is invoked" and would drop every obligation in the corpus, which is
+the opposite of failing safe.
+
+### 13.3 A citation is only proved if its document still hashes
+
+Extracted page text is a cache of what a document said. If the document's bytes no longer hash
+to the manifest, a quote found in that cache proves nothing about anything — yet
+`verified_entry_ids` previously counted it. A tampered PDF with intact page text still produced
+`VERIFIED` obligations at runtime, which is precisely the failure verification exists to
+prevent.
+
+A citation now fails when the document it names fails its hash check. Consequence: a tampered
+source makes every entry citing it `UNSOURCED`, the resolver excludes them, and
+`fully_sourced` is false. The gate is enforced at runtime, not only in the CLI report.
+
+### 13.4 What this does not change
+
+No GRAP threshold, obligation, action list or rupee amount was encoded. The corpus is still
+empty in every list. `make verify` still exits 2 (`CORPUS_NOT_READY`), which remains the
+correct Day 1 state: the mechanism is now complete and the data is still absent, and that
+distinction is the whole point.

@@ -21,7 +21,7 @@ import pytest
 from aadesh_core.domain import ImpliedStage, Provenance, SourceState
 from aadesh_core.stages import derive_implied_stage
 from tests.support.builders import FIXED_NOW, citation, reading
-from tests.support.source_scan import scan_tree
+from tests.support.source_scan import scan_file, scan_tree
 
 GUARDED_PACKAGES = ["domain", "resolver", "parchi.py", "stages.py"]
 
@@ -54,6 +54,19 @@ def test_no_money_named_constant_anywhere_in_the_core(core_root):
         v for v in scan_tree(core_root, relative_to=core_root.parent) if v.kind == "money-constant"
     ]
     assert violations == [], "\n".join(map(str, violations))
+
+
+def test_no_hardcoded_legal_data_in_the_ingestion_cli(repo_root):
+    """The door INTO the corpus is also a door for a remembered threshold.
+
+    Guarding only aadesh_core would leave the one file an author touches while holding the
+    order open: the obvious place to add "and default the band to 201-300 if the quote is
+    awkward".
+    """
+    path = repo_root / "services" / "aadesh_cli" / "corpus.py"
+    assert path.exists()
+    violations = scan_file(path, display_path="aadesh_cli/corpus.py")
+    assert violations == [], "\n".join(["Hardcoded legal data found:", *map(str, violations)])
 
 
 # --- the positive half: thresholds live in the corpus, and only there ------

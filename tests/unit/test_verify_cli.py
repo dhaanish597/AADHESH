@@ -13,6 +13,10 @@ Exit codes are distinct so CI and a human can tell "not ready yet" from "somethi
 
 from __future__ import annotations
 
+import os
+import subprocess
+import sys
+
 import pytest
 
 from aadesh_cli.verify import VerifyExit, run_verify
@@ -175,3 +179,23 @@ def test_exit_codes_are_distinct():
     assert len(set(values)) == len(values)
     assert VerifyExit.OK == 0
     assert all(v != 0 for v in values[1:])
+
+
+# --- the default path stays zero-infra -------------------------------------
+
+
+def test_importing_the_verify_cli_does_not_pull_in_a_pdf_library(repo_root):
+    """Ingestion is the only step that needs one. The central proof must not.
+
+    pypdf is an optional extra precisely so a judge can clone this repo cold, run
+    `make verify`, and get the citation proof without installing anything to read PDFs with.
+    That property survives only if nothing on the default path imports it, so this checks the
+    real thing -- whether the module is in sys.modules -- rather than grepping for text.
+    """
+    env = {**os.environ, "PYTHONPATH": str(repo_root / "services")}
+    code = "import sys, aadesh_cli.verify; print('pypdf' in sys.modules)"
+    result = subprocess.run(
+        [sys.executable, "-c", code], env=env, capture_output=True, text=True, cwd=repo_root
+    )
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == "False", "the verify path imported pypdf"

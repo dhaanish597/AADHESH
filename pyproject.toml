@@ -22,14 +22,22 @@ dev = [
     "pytest>=8.3",
     "pytest-cov>=6.0",
     "ruff>=0.8",
+    # Ingestion tests exercise the REAL pypdf extraction path rather than mocking it.
+    "pypdf>=5",
 ]
 # Opt-in only. The default test path must never require Docker or AWS.
 aws = [
     "boto3>=1.35",
 ]
+# Needed only to ADD a source document (`aadesh-corpus ingest`). `make verify` re-reads the
+# committed pN.txt files and must keep working without this installed.
+ingest = [
+    "pypdf>=5",
+]
 
 [project.scripts]
 aadesh-verify = "aadesh_cli.verify:main"
+aadesh-corpus = "aadesh_cli.corpus:main"
 
 [tool.hatch.build.targets.wheel]
 packages = [

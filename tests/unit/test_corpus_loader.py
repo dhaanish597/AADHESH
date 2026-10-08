@@ -70,6 +70,20 @@ def test_the_shipped_corpus_loads_empty(shipped_corpus):
     assert corpus.invoked_stage() is None
 
 
+def test_a_tampered_source_unsources_every_entry_that_cites_it(tmp_path):
+    """The page text is intact; the document it was extracted FROM is not. Still unsourced.
+
+    Extracted text is a cache of what a document said. If the document's bytes no longer
+    hash to the manifest, that cache is not evidence about anything -- and a loader that
+    kept calling the entry VERIFIED would let a tampered source keep enforcing.
+    """
+    root = _corpus(tmp_path)
+    (root / "sources" / "test-order.pdf").write_bytes(b"%PDF-1.4 something else entirely")
+
+    (obligation,) = LocalFileCorpus(root).obligations()
+    assert obligation.source_state is SourceState.UNSOURCED
+
+
 def test_schema_violation_raises_rather_than_degrading(tmp_path):
     root = _corpus(tmp_path)
     path = root / "obligations" / "construction_site.json"

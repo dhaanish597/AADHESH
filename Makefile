@@ -4,17 +4,18 @@
 # Docker, AWS credentials, or a network. Anything that does is opt-in.
 
 VENV := .venv
-ifeq ($(OS),Windows_NT)
-  PY := $(VENV)/Scripts/python.exe
-else
-  PY := $(VENV)/bin/python
-endif
+
+# Detect the venv layout from the filesystem rather than from $(OS). Git Bash on Windows
+# does not reliably surface OS as a make variable, and guessing wrong makes every target
+# fail with "No such file or directory". Falls back to whatever `python` is on PATH so the
+# error message is a useful one if `make setup` has not been run.
+PY := $(firstword $(wildcard $(VENV)/Scripts/python.exe) $(wildcard $(VENV)/bin/python) python)
 
 export PYTHONPATH := services
 
 .DEFAULT_GOAL := help
 .PHONY: help setup test test-all test-integration verify verify-tamper verify-index \
-        lint fmt dev clean check
+        corpus corpus-help lint fmt dev clean check
 
 help: ## Show available targets
 	@grep -hE '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) \
@@ -47,6 +48,22 @@ verify-tamper: ## Flip one byte in a scratch copy and prove the check CATCHES it
 
 verify-index: ## Additionally assert the OpenSearch index agrees (requires Docker)
 	$(PY) -m aadesh_cli.verify --with-index
+
+# --- corpus (the only sanctioned way in) -----------------------------------
+
+corpus: ## Add to the corpus: make corpus ARGS="ingest --pdf ~/order.pdf --doc-id x --url https://..."
+	@test -n "$(ARGS)" || (echo 'Pass ARGS. Examples:'; echo; $(MAKE) --no-print-directory corpus-help; exit 1)
+	$(PY) -m aadesh_cli.corpus $(ARGS)
+
+corpus-help: ## Show the corpus CLI subcommands
+	@echo '  ingest          make corpus ARGS="ingest --pdf <file> --doc-id <id> --url <official url>"'
+	@echo '  obligation      make corpus ARGS="add-obligation --file obligation.json"'
+	@echo '  entitlement     make corpus ARGS="add-entitlement --file entitlement.json"'
+	@echo '  stage band      make corpus ARGS="add-stage-band --file band.json"'
+	@echo '  invoked stage   make corpus ARGS="invoke-stage --stage 3 --doc-id <id> --page 2 --quote <sentence>"'
+	@echo ''
+	@echo '  Every quote is checked VERBATIM against the page it cites, using the same'
+	@echo '  normalisation `make verify` uses. A paraphrase is refused at the door.'
 
 # NOTE ON SYNTAX: `make verify --tamper` is NOT valid GNU make — make parses
 # `--tamper` as one of its own options and aborts. Use `make verify-tamper`,

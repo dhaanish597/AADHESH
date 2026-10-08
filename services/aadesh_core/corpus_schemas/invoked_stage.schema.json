@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://aadesh.local/schemas/invoked_stage.schema.json",
+  "title": "Invoked GRAP stage (rules-as-data)",
+  "description": "Which stage a CAQM ORDER has invoked, together with the verbatim sentence that invoked it. This is NOT computed from an AQI reading: an order can invoke a stage pre-emptively on a forecast, or decline to. The implied stage is derived separately from stage_bands. When the two disagree, Aadesh says so rather than choosing. The citation is mandatory because this single field decides whether any obligation in the corpus applies at all.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["stage", "source_doc", "page", "quote", "invoked_at"],
+  "properties": {
+    "stage": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Stage ordinal as stated in the order. No maximum is encoded: which stages exist is declared by the corpus, not by this schema or by application code."
+    },
+    "source_doc": {
+      "type": "string",
+      "minLength": 1,
+      "description": "doc_id of the order in sources/manifest.json. The same key every other citation uses, so verification can find it without a special case."
+    },
+    "page": { "type": "integer", "minimum": 1 },
+    "quote": {
+      "type": "string",
+      "minLength": 1,
+      "description": "VERBATIM text from that page stating the stage is invoked. `make verify` re-checks it like any other citation."
+    },
+    "invoked_at": {
+      "type": "string",
+      "minLength": 1,
+      "description": "ISO-8601 instant the order took effect, as stated in the order, not as observed by a clock."
+    },
+    "note": {
+      "type": "string",
+      "description": "Optional editorial note. Never the legal basis for anything; the quote is."
+    }
+  }
+}

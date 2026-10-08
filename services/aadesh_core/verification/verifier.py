@@ -9,9 +9,16 @@ What gets proved, in order:
   1. Every manifest document's bytes on disk SHA-256 to the hash recorded for them.
   2. Every citation names a document that exists in the manifest.
   3. Every citation's page text file exists.
-  4. Every citation's quote appears VERBATIM in that page text.
+  4. The document the citation names passed check 1.
+  5. Every citation's quote appears VERBATIM in that page text.
 
-A corpus entry that passes all four is VERIFIED and may enter resolution. Anything else is
+Check 4 is not redundant with check 1. Extracted page text is a cache of what a document
+said; if the document's bytes no longer hash to the manifest, that cache is not evidence
+about anything, and a quote found in it proves nothing. Marking such a citation verified
+would let a tampered source keep enforcing, which is precisely what verification exists to
+prevent.
+
+A corpus entry that passes all five is VERIFIED and may enter resolution. Anything else is
 UNSOURCED and is excluded -- loudly.
 """
 
@@ -28,6 +35,14 @@ CORPUS_FILES = {
     "obligation": ("obligations/construction_site.json", "obligations", "obligation_id"),
     "entitlement": ("entitlements/cess_fund.json", "entitlements", "entitlement_id"),
     "stage_band": ("stage_bands/grap_stage_bands.json", "stage_bands", "stage"),
+}
+
+#: Files holding ONE object rather than a list. The invoked stage is checked here because it
+#: is the fact that decides whether any obligation applies at all. Left outside the proof, a
+#: tampered order could change what the entire system enforces while every obligation in the
+#: corpus still verified cleanly.
+SINGLETON_FILES = {
+    "invoked_stage": ("invoked_stage.json", "invoked"),
 }
 
 
@@ -85,7 +100,7 @@ class VerificationReport:
         return {c.entry_id for c in self.citations if c.ok}
 
 
-def _normalise(text: str) -> str:
+def normalise(text: str) -> str:
     """Fold the differences that PDF text extraction introduces but meaning does not.
 
     Unicode NFKC plus whitespace collapsing. This is the one place verification is lenient,
@@ -123,18 +138,21 @@ def verify_corpus(corpus_root: Path) -> VerificationReport:
         return report
 
     documents = {d["doc_id"]: d for d in manifest.get("documents", [])}
+    unhashed: set[str] = set()
 
     # 1. document bytes
     page_text: dict[tuple[str, int], str] = {}
     for doc_id, doc in documents.items():
         local = corpus_root / doc["local_path"]
         if not local.exists():
+            unhashed.add(doc_id)
             report.documents.append(
                 DocumentCheck(doc_id, False, f"file missing: {doc['local_path']}")
             )
             continue
         actual = hashlib.sha256(local.read_bytes()).hexdigest()
         if actual != doc["sha256"]:
+            unhashed.add(doc_id)
             report.documents.append(
                 DocumentCheck(
                     doc_id,
@@ -163,8 +181,40 @@ def verify_corpus(corpus_root: Path) -> VerificationReport:
             entry_id = str(entry.get(id_key, "<no id>"))
             for citation in _citations_in(entry):
                 report.citations.append(
-                    _check_citation(corpus_root, documents, page_text, kind, entry_id, citation)
+                    _check_citation(
+                        corpus_root, documents, unhashed, page_text, kind, entry_id, citation
+                    )
                 )
+
+    # 5. the invoked stage, which is a singleton and is therefore easy to forget
+    for kind, (relative, key) in SINGLETON_FILES.items():
+        path = corpus_root / relative
+        if not path.exists():
+            continue
+        try:
+            payload = _load_json(path)
+        except json.JSONDecodeError as exc:
+            report.errors.append(f"{relative} is not valid JSON: {exc}")
+            continue
+        entry = payload.get(key)
+        if not isinstance(entry, dict):
+            continue
+        entry_id = str(entry.get("stage", "<no stage>"))
+        citations = _citations_in(entry)
+        if not citations:
+            report.errors.append(
+                f"{relative}: it invokes stage {entry_id} without citing the page of the "
+                f"order that invoked it. Add source_doc, page and quote copied verbatim from "
+                f"that page. The invoked stage decides which obligations apply, so it cannot "
+                f"be the one claim in the corpus that nothing re-proves."
+            )
+            continue
+        for citation in citations:
+            report.citations.append(
+                _check_citation(
+                    corpus_root, documents, unhashed, page_text, kind, entry_id, citation
+                )
+            )
 
     return report
 
@@ -186,6 +236,7 @@ def _citations_in(entry: dict) -> list[dict]:
 def _check_citation(
     corpus_root: Path,
     documents: dict[str, dict],
+    unhashed: set[str],
     page_cache: dict[tuple[str, int], str],
     kind: str,
     entry_id: str,
@@ -206,6 +257,18 @@ def _check_citation(
             f"cites unknown document {doc_id!r}; it is not in the source manifest",
         )
 
+    if doc_id in unhashed:
+        return CitationCheck(
+            kind,
+            entry_id,
+            doc_id,
+            page,
+            False,
+            f"quotes {doc_id!r}, whose bytes no longer hash to the manifest. Extracted page "
+            f"text is only evidence about the document it came from, so a quote found in it "
+            f"proves nothing until the bytes match.",
+        )
+
     key = (doc_id, page)
     if key not in page_cache:
         page_file = corpus_root / doc["pages_dir"] / f"p{page}.txt"
@@ -218,9 +281,9 @@ def _check_citation(
                 False,
                 f"no extracted text for page {page} (expected {page_file.name})",
             )
-        page_cache[key] = _normalise(page_file.read_text(encoding="utf-8"))
+        page_cache[key] = normalise(page_file.read_text(encoding="utf-8"))
 
-    if _normalise(quote) in page_cache[key]:
+    if normalise(quote) in page_cache[key]:
         return CitationCheck(kind, entry_id, doc_id, page, True, "quote found verbatim")
 
     return CitationCheck(

@@ -82,29 +82,10 @@ class LocalFileCorpus:
 
     @staticmethod
     def _reject_self_declared_provenance(entry: dict[str, Any], relative: str) -> None:
-        present = FORBIDDEN_KEYS & entry.keys()
-        if present:
-            raise CorpusIntegrityError(
-                f"{relative}: entry declares {sorted(present)}. A corpus entry cannot assert "
-                f"its own source_state -- verification against hashed source bytes is the "
-                f"only thing that may set it. Remove the key."
-            )
+        reject_self_declared_provenance(entry, relative)
 
     def _validate(self, entry: dict[str, Any], schema_name: str) -> None:
-        schema_path = self._schema_dir / schema_name
-        if not schema_path.exists():
-            raise CorpusIntegrityError(
-                f"Schema {schema_name} is missing from {self._schema_dir}. Refusing to load "
-                f"corpus data unvalidated."
-            )
-        schema = json.loads(schema_path.read_text(encoding="utf-8"))
-        try:
-            Draft202012Validator(schema).validate(entry)
-        except JsonSchemaValidationError as exc:
-            field = "/".join(str(p) for p in exc.absolute_path) or "<root>"
-            raise CorpusIntegrityError(
-                f"{schema_name}: invalid entry at {field}: {exc.message}"
-            ) from exc
+        validate_entry(entry, schema_name, schema_dir=self._schema_dir)
 
     # -- RulesCorpus port ---------------------------------------------------
 
@@ -211,8 +192,9 @@ class LocalFileCorpus:
     def invoked_stage(self) -> InvokedStage | None:
         """The stage a CAQM order has invoked, with that order's hash attached.
 
-        Returns None when nothing is recorded, or when the named order is absent from the
-        manifest -- an invoked stage whose order cannot be hashed is not usable evidence.
+        Returns None when nothing is recorded. Raises when a stage IS recorded but its
+        citation cannot be re-proved: an unprovable invoked stage is not degraded to "nothing
+        applies", because that would silently drop every obligation in the corpus.
         """
         path = self.root / "invoked_stage.json"
         if not path.exists():
@@ -221,7 +203,16 @@ class LocalFileCorpus:
         if not payload:
             return None
 
-        doc_id = payload["order_doc_id"]
+        # `source_doc`, the same key every other citation in the corpus uses. The invoked
+        # stage is a citation like any other, and giving it its own key name would make it
+        # the one citation no generic check could find.
+        doc_id = payload.get("source_doc")
+        if not doc_id:
+            raise CorpusIntegrityError(
+                f"invoked_stage.json must name the order as 'source_doc' (found keys: "
+                f"{sorted(payload)}). Every citation in this corpus names its document the "
+                f"same way, so that verification can find all of them."
+            )
         documents = {d["doc_id"]: d for d in self._manifest_documents()}
         if doc_id not in documents:
             raise CorpusIntegrityError(
@@ -229,12 +220,71 @@ class LocalFileCorpus:
                 f"manifest. A stage invoked by an order nobody hashed cannot be cited."
             )
 
+        if not self._invoked_stage_is_proved():
+            raise CorpusIntegrityError(
+                "invoked_stage.json invokes a stage that cannot be re-proved against its "
+                "source. Either the citation is missing (source_doc, page and quote copied "
+                "verbatim from that page) or the document's bytes no longer hash to the "
+                "manifest. Run `make verify` to see which. The invoked stage decides which "
+                "obligations apply at all, so an unprovable one is refused rather than "
+                "quietly applied."
+            )
+
+        validate_entry(payload, "invoked_stage.schema.json", schema_dir=self._schema_dir)
+        try:
+            invoked_at = datetime.fromisoformat(payload["invoked_at"])
+        except ValueError as exc:
+            raise CorpusIntegrityError(
+                f"invoked_stage.json: invoked_at {payload['invoked_at']!r} is not an ISO-8601 "
+                f"instant. Copy the date the order states, e.g. 2026-10-08T06:00:00+05:30."
+            ) from exc
+
         return InvokedStage(
             stage=payload["stage"],
             order_doc_id=doc_id,
             order_sha256=documents[doc_id]["sha256"],
-            invoked_at=datetime.fromisoformat(payload["invoked_at"]),
+            invoked_at=invoked_at,
         )
+
+    def _invoked_stage_is_proved(self) -> bool:
+        """True only if verification found and re-proved the stage's own citation."""
+        return any(c.ok and c.entry_kind == "invoked_stage" for c in self._report.citations)
+
+
+def reject_self_declared_provenance(entry: dict[str, Any], where: str) -> None:
+    """A corpus entry may not assert its own provenance.
+
+    Shared with the ingestion CLI on purpose: if the writer and the loader disagreed here,
+    an entry could be accepted on the way in and rejected on the way out -- or worse, the
+    reverse.
+    """
+    present = FORBIDDEN_KEYS & entry.keys()
+    if present:
+        raise CorpusIntegrityError(
+            f"{where}: entry declares {sorted(present)}. A corpus entry cannot assert "
+            f"its own source_state -- verification against hashed source bytes is the "
+            f"only thing that may set it. Remove the key."
+        )
+
+
+def validate_entry(
+    entry: dict[str, Any], schema_name: str, *, schema_dir: Path = SCHEMA_DIR
+) -> None:
+    """Validate one corpus entry against a schema that ships with the CODE, not the corpus."""
+    schema_path = Path(schema_dir) / schema_name
+    if not schema_path.exists():
+        raise CorpusIntegrityError(
+            f"Schema {schema_name} is missing from {schema_dir}. Refusing to handle corpus "
+            f"data unvalidated."
+        )
+    schema = json.loads(schema_path.read_text(encoding="utf-8"))
+    try:
+        Draft202012Validator(schema).validate(entry)
+    except JsonSchemaValidationError as exc:
+        field = "/".join(str(p) for p in exc.absolute_path) or "<root>"
+        raise CorpusIntegrityError(
+            f"{schema_name}: invalid entry at {field}: {exc.message}"
+        ) from exc
 
 
 def _citation(entry: dict[str, Any]) -> Citation:

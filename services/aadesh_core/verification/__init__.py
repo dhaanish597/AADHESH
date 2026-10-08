@@ -6,6 +6,7 @@ from aadesh_core.verification.verifier import (
     CitationCheck,
     DocumentCheck,
     VerificationReport,
+    normalise,
     verify_corpus,
 )
 
@@ -13,5 +14,6 @@ __all__ = [
     "CitationCheck",
     "DocumentCheck",
     "VerificationReport",
+    "normalise",
     "verify_corpus",
 ]

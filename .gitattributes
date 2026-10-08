@@ -9,9 +9,17 @@
 # checkout, a judge cloning this repo on a different OS would get different
 # bytes than we hashed, and verification would fail for a reason that has
 # nothing to do with the citations. `-text` disables all conversion.
+#
+# Scoped to the DOCUMENT BYTES only. The extracted page text and the manifest are
+# derived and hand-reviewed, so they stay normal text with readable diffs -- and
+# because verification folds line endings and whitespace when matching a quote,
+# LF-vs-CRLF cannot change whether a citation verifies.
 # ---------------------------------------------------------------------------
-corpus/sources/** -text
+corpus/sources/*.pdf -text
 *.pdf binary
+
+corpus/sources/pages/** text eol=lf
+corpus/sources/manifest.json text eol=lf
 
 # Keep Makefile tabs and shell scripts LF regardless of platform.
 Makefile text eol=lf

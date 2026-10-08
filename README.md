@@ -53,6 +53,7 @@ make setup           # uv venv + dev deps. No Docker, no AWS account, no network
 cp .env.example .env
 make test            # pure pytest against in-memory fakes, ~seconds
 make verify          # citation proof. Exits non-zero until the corpus is sourced.
+make corpus-help     # how to add a source document, once you have the real order
 ```
 
 | Target | What it does | Needs Docker? |
@@ -60,6 +61,7 @@ make verify          # citation proof. Exits non-zero until the corpus is source
 | `make test` | default suite, fakes only | no |
 | `make verify` | re-prove every citation against hashed source bytes | no |
 | `make verify-tamper` | flip one byte in a scratch copy, prove the check catches it | no |
+| `make corpus` | the ONLY sanctioned way to add a document or a cited clause | no |
 | `make test-integration` | same core against LocalStack | yes |
 | `make verify-index` | additionally assert the OpenSearch index agrees | yes |
 
@@ -138,6 +140,13 @@ silently presented as a measured one.
 every cited quote appears **verbatim** in the page it claims. Zero infrastructure, seconds to
 run on a clean machine.
 
+It checks obligations, entitlements, stage bands **and the invoked stage** — the last of which
+is the fact that decides whether any obligation applies at all. A quote is only counted as
+proved if the document it was extracted from still hashes to the manifest: extracted text is a
+cache of what a document said, and if the bytes have changed, the cache is evidence about
+nothing. Without that rule a tampered source would keep enforcing, which is precisely what
+verification exists to prevent.
+
 **It currently exits non-zero because the corpus has zero verified citations.** That is the
 expected Day 1 state and the gate working as designed — not a defect. A hash check that has
 never failed proves only that you did not delete your files.
@@ -148,6 +157,18 @@ ever *pass*, it exits with a distinct code and a louder message.
 
 Nothing in `corpus/` is populated until the authoritative CAQM order is located, downloaded
 from its official domain, SHA-256 hashed, and quoted verbatim. See [corpus/README.md](corpus/README.md).
+
+The ingestion CLI is the only door in, and it refuses a paraphrase:
+
+```bash
+make corpus ARGS="ingest --pdf ~/Downloads/order.pdf --doc-id caqm-grap-2026-01 --url https://caqm.nic.in/..."
+make corpus ARGS="add-obligation --file obligation.json"   # quote must be verbatim on the cited page
+make verify
+```
+
+It calls the **same** normalisation function the verifier calls, so the writer cannot accept
+something `make verify` will later reject. A test asserts the two agree, because if they ever
+drift apart the central claim of this project is theatre.
 
 ---
 

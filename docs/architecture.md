@@ -31,7 +31,9 @@ services/
 │   ├── explanation/      the output contract + deterministic text
 │   └── corpus_schemas/   JSON Schemas (with the CODE, not the corpus)
 ├── aadesh_adapters/      ← everything that touches the world
-└── aadesh_cli/           make verify
+│   ├── sources/          PDF bytes → citable page text (pypdf, imported lazily)
+│   └── corpus/           the join between verification and resolution
+└── aadesh_cli/           make verify, and the corpus ingestion CLI
 ```
 
 A Lambda handler and the local HTTP server are both thin adapters calling the same core
@@ -104,7 +106,11 @@ convenience — it is what lets a judge clone the repo cold and run the central 
 ## Known gaps
 
 - **No authoritative CAQM source is encoded.** The corpus is empty and `make verify` fails.
-  This is the top blocker and it is not an engineering one.
+  This is the top blocker and it is not an engineering one. The ingestion mechanism
+  (`make corpus`) is built and tested, but has never been run against a real CAQM order,
+  because no order has been downloaded. The first real run is untested against real PDFs —
+  pypdf's extraction of a scanned annexure or a two-column gazette page is the likely
+  surprise.
 - **SAM CLI is not installed** on the current dev machine, so `sam local` is untested.
 - **AWS adapters are not written** beyond the ports they will satisfy. Deliberate: the core
   slice had to work locally first.

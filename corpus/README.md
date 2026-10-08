@@ -38,15 +38,62 @@ verified. Both are refused.
 
 ## Adding a document
 
-1. Locate the current order on the official CAQM domain. Not a mirror, not a news PDF.
-2. Download it and move it to `corpus/sources/<doc_id>.pdf`.
-3. Compute the hash and add a `documents[]` entry to `sources/manifest.json`:
-   ```bash
-   sha256sum corpus/sources/<doc_id>.pdf
-   ```
-4. Extract page text to `corpus/sources/pages/<doc_id>/p<N>.txt`, one file per page, 1-indexed.
-5. Add obligations / entitlements / stage bands quoting **verbatim** from those page files.
-6. Run `make verify`. If a quote does not appear byte-for-byte on the page it claims, it fails.
+**Do not hand-edit this directory.** Use the ingestion CLI, which does steps 1-4 for you and
+then *refuses* a quote that is not on the page it claims. `make corpus-help` lists everything.
+
+```bash
+# 1-4. hash the bytes you downloaded, store them, extract page text. One command.
+make corpus ARGS="ingest --pdf ~/Downloads/order.pdf --doc-id caqm-grap-2026-01"
+make corpus ARGS="ingest ... --url https://caqm.nic.in/... --publisher CAQM"
+
+# 5. add a clause, quoting VERBATIM from one of the p<N>.txt files it just wrote
+make corpus ARGS="add-obligation --file obligation.json"
+make corpus ARGS="add-entitlement --file entitlement.json"
+make corpus ARGS="add-stage-band --file band.json"
+make corpus ARGS="invoke-stage --stage 3 --doc-id caqm-grap-2026-01 --page 2"
+make corpus ARGS="invoke-stage ... --quote '<the sentence on page 2 that invokes Stage III>'"
+
+# 6. re-prove every citation against the stored bytes
+make verify
+```
+
+The CLI and `make verify` call **the same** `normalise` function, so the writer cannot accept
+something the verifier will reject. If those two ever drift apart, the central claim of this
+project is theatre -- so a test asserts they agree.
+
+What the CLI refuses, and why:
+
+| Refusal | Why it exists |
+|---|---|
+| bytes that are not a PDF | a saved HTML page or your own summary is not the order |
+| a PDF with no text layer | a quote cannot be proved against pixels; OCR it first and say you did |
+| a `doc_id` already in the manifest | re-ingesting would orphan every citation checked against the old bytes |
+| a `doc_id` with a slash or a space | it becomes a filename; traversal writes outside the corpus |
+| a **paraphrased** quote | the single most important refusal here |
+| a quote on the wrong page | a right sentence attributed to the wrong page is still a false citation |
+| an entry declaring its own `source_state` | provenance is computed, never asserted |
+| an amount whose own quote is unfound | a rupee figure with nothing behind it is the failure mode of this whole domain |
+| a citation to a document nobody ingested | it could never be re-proved, so it is not a citation |
+| an id that already exists | editing a clause in place would desynchronise it from parchis already issued |
+| an invoked stage with no citation | it decides which obligations apply, so it is the last thing that may be taken on trust |
+
+## Two mechanisms that are easy to confuse
+
+- `ingest` **never** populates an obligation, threshold or amount. It only stores bytes and
+  extracts text. It cannot encode a rule, by construction.
+- `add-*` **never** invents a hash or a page. Every citation is checked against page text
+  that `ingest` produced from bytes that were hashed at the moment of download.
+
+## The invoked stage is a citation too
+
+`invoked_stage.json` is the fact that decides whether **any** obligation applies. It therefore
+carries the same `source_doc` / `page` / `quote` every other citation carries -- the same key
+names, so generic verification can find it without a special case -- and `make verify`
+re-proves it like the rest.
+
+The loader **refuses** an invoked stage it cannot re-prove rather than returning `None`.
+Returning `None` would read as "no stage is invoked" and silently drop every obligation in the
+corpus, which is the opposite of failing safe.
 
 ## Why `quote` must be verbatim
 

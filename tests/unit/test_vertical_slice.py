@@ -14,6 +14,7 @@ If this file passes, every claim in the README about the deterministic path is d
 
 from __future__ import annotations
 
+import json
 from datetime import UTC, datetime
 
 import pytest
@@ -103,9 +104,20 @@ def sourced_corpus(tmp_path):
         .with_obligation(obligation_id="ob-dust-01", page=4, quote=VERBATIM)
         .build()
     )
+    # The invoked stage carries its own verbatim citation. It decides which obligations
+    # apply, so it is the last thing in the corpus that may be taken on trust.
     (root / "invoked_stage.json").write_text(
-        '{"invoked": {"stage": 3, "order_doc_id": "test-order", '
-        '"invoked_at": "2026-10-08T06:00:00+00:00"}}',
+        json.dumps(
+            {
+                "invoked": {
+                    "stage": 3,
+                    "source_doc": "test-order",
+                    "invoked_at": "2026-10-08T06:00:00+00:00",
+                    "page": 4,
+                    "quote": VERBATIM,
+                }
+            }
+        ),
         encoding="utf-8",
     )
     return LocalFileCorpus(root)
