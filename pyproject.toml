@@ -1,3 +1,7 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
 [project]
 name = "aadesh"
 version = "0.1.0"
@@ -26,6 +30,13 @@ aws = [
 
 [project.scripts]
 aadesh-verify = "aadesh_cli.verify:main"
+
+[tool.hatch.build.targets.wheel]
+packages = [
+    "services/aadesh_core",
+    "services/aadesh_adapters",
+    "services/aadesh_cli",
+]
 
 [tool.pytest.ini_options]
 # services/ is on the path so `aadesh_core` imports without an install step.
