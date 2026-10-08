@@ -79,7 +79,12 @@ fmt: ## Autoformat and autofix
 	$(PY) -m ruff check --fix services tests
 	$(PY) -m ruff format services tests
 
-check: lint test verify ## What CI runs
+check: lint test ## What CI runs: lint, tests, then the citation gate
+	@# `make verify` distinguishes "not ready" (2) from "wrong" (1) on purpose, so CI
+	@# accepts an empty corpus and must never accept a bad citation. Do NOT relax this
+	@# into `|| true`: that would make the gate decorative, which is the one outcome
+	@# this whole project exists to avoid.
+	@$(PY) -m aadesh_cli.verify; code=$$?; 	if [ $$code -eq 2 ]; then 	  echo ""; 	  echo "check: lint ok, tests ok, corpus not ready (exit 2) - accepted."; 	elif [ $$code -ne 0 ]; then 	  echo ""; 	  echo "check: FAILED - the citation gate reported exit $$code."; 	  exit $$code; 	fi
 
 # --- dev -------------------------------------------------------------------
 
