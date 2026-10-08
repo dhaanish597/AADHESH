@@ -73,8 +73,26 @@ reading ──▶ corpus ──▶ verify ──▶ resolve ──▶ Cedar ─�
 
 Bedrock gets two jobs: render an already-computed result into plain language, and answer a
 question by citing already-computed results. Its output is checked against
-`aadesh_core.explanation.check_explanation` before a user sees it. **The model can be entirely
-unavailable and Aadesh still works.**
+`aadesh_core.explanation.check_explanation` and `check_grounding` before a user sees it.
+**The model can be entirely unavailable and Aadesh still works.**
+
+### AI explains; deterministic code decides
+
+The explanation layer is documented in full in [explanation-layer.md](explanation-layer.md).
+Three properties hold by construction:
+
+- The deterministic result (`ResolutionResult` / `Parchi`) is retained **separately** from the
+  model response and is never replaced by it. If the two disagree, the deterministic result
+  wins.
+- The model receives a structured, PII-free `ExplanationRequest` and may only cite the
+  citations it contains. Hallucinated citations, hashes, stages and replays are rejected and
+  the deterministic text is shown (`UNSUPPORTED`).
+- The explanation endpoint goes through Cedar first, using `ViewSiteExecution` for a site and
+  `ViewParchi` for a Parchi. On a denial the model is never called. There is no backdoor around
+  the facilitator privacy boundary.
+
+**An LLM response is never authoritative evidence.** It is presentation only; compliance
+resolution, authorization, obligation status and Parchi state are computed without it.
 
 ## Authorization and acknowledgement: two boundaries, not one
 

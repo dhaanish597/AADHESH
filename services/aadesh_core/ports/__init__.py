@@ -17,7 +17,7 @@ from aadesh_core.ports.authz import (
 )
 from aadesh_core.ports.clock import Clock
 from aadesh_core.ports.corpus import InvokedStageSource, RulesCorpus, SourceDocumentStore
-from aadesh_core.ports.explanation import ExplanationProvider
+from aadesh_core.ports.explanation import ExplanationModel, ExplanationProvider
 from aadesh_core.ports.parchi_store import ParchiStore
 from aadesh_core.ports.verification import CitationVerifier
 
@@ -30,6 +30,7 @@ __all__ = [
     "CitationVerifier",
     "Clock",
     "EntityRef",
+    "ExplanationModel",
     "ExplanationProvider",
     "InvokedStageSource",
     "ParchiStore",

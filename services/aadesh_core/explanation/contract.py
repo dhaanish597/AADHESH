@@ -75,6 +75,41 @@ class ContractViolation:
     detail: str
 
 
+def check_prose(text: str, *, has_cited_amount: bool) -> list[ContractViolation]:
+    """The claim-independent half of the contract: register and monetary figures.
+
+    Split out so an explanation that has no structured claims to check -- a Parchi lifecycle
+    sentence, say -- is still held to the same two rules the model must never breach. Sharing
+    one implementation is the point: two copies of `BANNED_PHRASES` would eventually disagree
+    about whether "approved" is allowed.
+    """
+    violations: list[ContractViolation] = []
+    lowered = text.lower()
+    for phrase in BANNED_PHRASES:
+        if phrase in lowered:
+            violations.append(
+                ContractViolation(
+                    kind="banned-phrase",
+                    detail=(
+                        f"Contains {phrase!r}. Aadesh is not a government application and "
+                        f"not legal advice; it cannot speak as though a decision was made."
+                    ),
+                )
+            )
+
+    if not has_cited_amount and _MONEY_RE.search(text):
+        violations.append(
+            ContractViolation(
+                kind="uncited-amount",
+                detail=(
+                    "States a monetary figure, but no entitlement in the corpus carries a "
+                    "cited amount. Report displaced worker-days instead."
+                ),
+            )
+        )
+    return violations
+
+
 def check_explanation(
     explanation: Explanation, *, context: ExplanationContext
 ) -> list[ContractViolation]:
@@ -118,29 +153,7 @@ def check_explanation(
                 )
             )
 
-    lowered = explanation.text.lower()
-    for phrase in BANNED_PHRASES:
-        if phrase in lowered:
-            violations.append(
-                ContractViolation(
-                    kind="banned-phrase",
-                    detail=(
-                        f"Contains {phrase!r}. Aadesh is not a government application and "
-                        f"not legal advice; it cannot speak as though a decision was made."
-                    ),
-                )
-            )
-
-    if not context.has_cited_amount and _MONEY_RE.search(explanation.text):
-        violations.append(
-            ContractViolation(
-                kind="uncited-amount",
-                detail=(
-                    "States a monetary figure, but no entitlement in the corpus carries a "
-                    "cited amount. Report displaced worker-days instead."
-                ),
-            )
-        )
+    violations.extend(check_prose(explanation.text, has_cited_amount=context.has_cited_amount))
 
     return violations
 

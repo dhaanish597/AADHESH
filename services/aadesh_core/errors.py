@@ -133,6 +133,15 @@ class ExplanationContractViolation(AadeshError):
     """Generated prose breached its output contract and must not be shown to a user."""
 
 
+class ExplanationUnavailable(AadeshError):
+    """The model-backed explanation layer could not produce a usable explanation.
+
+    This is NEVER a failure of compliance resolution. The deterministic text is already
+    correct and remains available; this marks only the optional model layer. Callers surface
+    it as the explicit EXPLANATION_UNAVAILABLE state and show the deterministic sentence.
+    """
+
+
 class TestOnlyComponentInProduction(AadeshError):
     """A component that is only safe in tests was constructed outside the test environment."""
 
