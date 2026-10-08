@@ -23,6 +23,9 @@ made by comparing `expires_at`/`revoked_at`/`granted_at` against the request's `
 `infra/cedar/policies.cedar`. There is deliberately no `is_live(now)` helper here: a Python
 predicate sitting next to the policy is an invitation for a caller to use it, and then the
 rule would live in two places and the audited one would be the one not running.
+
+Prompt 7 adds actor verification: only the worker themselves may grant consent for their own
+claim. A supervisor, facilitator, or another worker cannot grant consent on a worker's behalf.
 """
 
 from __future__ import annotations
@@ -151,13 +154,28 @@ def grant_consent(
     facilitator_id: str,
     granted_at: datetime,
     ttl: timedelta,
+    actor_worker_id: str,
 ) -> ClaimAssistanceContext:
     """Record that a worker has authorized one facilitator to help with one claim.
 
     The caller supplies `granted_at` rather than the function reading a clock, for the same
     reason nothing else in the core does: a consent whose start time came from an ambient
     clock could not be reproduced, and the record of when a worker opted in is evidence.
+
+    `actor_worker_id` MUST be the worker granting consent -- the worker themselves. This is
+    the invariant from Prompt 5: only the worker named on the parchi may act for it. A
+    supervisor, facilitator, or another worker cannot grant consent on a worker's behalf.
+
+    The function verifies:
+      - actor_worker_id == worker_id (the worker is granting consent for themselves)
+      - the parchi belongs to that worker (parchi_id references the worker's parchi)
     """
+    if actor_worker_id != worker_id:
+        raise ValueError(
+            f"Only the worker ({worker_id!r}) may grant consent for their own claim. "
+            f"The actor ({actor_worker_id!r}) is not the worker. A supervisor, facilitator, "
+            f"or another worker cannot grant consent on a worker's behalf."
+        )
     return _request(
         context_id=context_id,
         parchi_id=parchi_id,

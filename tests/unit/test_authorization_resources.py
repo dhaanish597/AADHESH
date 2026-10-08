@@ -46,6 +46,7 @@ def test_granting_consent_records_who_granted_it_to_whom():
         facilitator_id="fac-1",
         granted_at=GRANTED_AT,
         ttl=timedelta(hours=24),
+        actor_worker_id="wrk-1",
     )
     assert consent.worker_id == "wrk-1"
     assert consent.facilitator_id == "fac-1"
@@ -65,6 +66,7 @@ def test_a_consent_cannot_be_granted_with_a_non_positive_ttl():
             facilitator_id="fac-1",
             granted_at=GRANTED_AT,
             ttl=timedelta(0),
+            actor_worker_id="wrk-1",
         )
 
 
@@ -80,6 +82,7 @@ def test_a_consent_cannot_name_the_worker_as_their_own_facilitator():
             facilitator_id="wrk-1",
             granted_at=GRANTED_AT,
             ttl=timedelta(hours=1),
+            actor_worker_id="wrk-1",
         )
 
 
@@ -91,6 +94,7 @@ def test_revoking_records_the_moment_it_happened():
         facilitator_id="fac-1",
         granted_at=GRANTED_AT,
         ttl=timedelta(hours=24),
+        actor_worker_id="wrk-1",
     )
     revoked = revoke_consent(consent, now=GRANTED_AT + timedelta(hours=1))
     assert revoked.revoked_at == GRANTED_AT + timedelta(hours=1)
@@ -106,6 +110,7 @@ def test_revoking_an_already_revoked_consent_keeps_the_first_moment():
         facilitator_id="fac-1",
         granted_at=GRANTED_AT,
         ttl=timedelta(hours=24),
+        actor_worker_id="wrk-1",
     )
     first = revoke_consent(consent, now=GRANTED_AT + timedelta(hours=1))
     second = revoke_consent(first, now=GRANTED_AT + timedelta(hours=5))
@@ -125,6 +130,7 @@ def _consent(**overrides) -> ClaimAssistanceContext:
         facilitator_id="fac-1",
         granted_at=GRANTED_AT,
         ttl=timedelta(hours=24),
+        actor_worker_id="wrk-1",
     )
     fields.update(overrides)
     return grant_consent(**fields)

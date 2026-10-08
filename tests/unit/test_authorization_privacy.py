@@ -140,6 +140,7 @@ def _consent(**overrides) -> ClaimAssistanceContext:
         facilitator_id="fac-1",
         granted_at=NOW,
         ttl=timedelta(hours=24),
+        actor_worker_id="wrk-1",
     )
     fields_.update(overrides)
     return grant_consent(**fields_)

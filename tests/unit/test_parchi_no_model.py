@@ -28,6 +28,7 @@ ACKNOWLEDGEMENT_PATH = [
     CORE / "parchi_ack" / "roster.py",
     CORE / "parchi_ack" / "workflow.py",
     CORE / "parchi_ack" / "service.py",
+    CORE / "parchi_ack" / "assistance.py",
 ]
 
 BANNED_ROOTS = {

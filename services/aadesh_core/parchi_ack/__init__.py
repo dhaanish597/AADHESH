@@ -29,7 +29,15 @@ Nothing in this package imports a model, a network client or an AWS SDK, and
 
 from __future__ import annotations
 
+from aadesh_core.parchi_ack.assistance import (
+    FacilitatorClaimView,
+    assist_claim,
+    build_facilitator_view,
+)
 from aadesh_core.parchi_ack.events import (
+    EVENT_TYPE_ASSIST_CLAIM,
+    EVENT_TYPE_CONSENT_GRANTED,
+    EVENT_TYPE_CONSENT_REVOKED,
     EVENT_TYPE_PARCHI_ACKNOWLEDGED,
     EVENT_TYPE_PARCHI_SEALED,
     PARCHI_EVENT_SCHEMA_VERSION,
@@ -63,6 +71,9 @@ from aadesh_core.parchi_ack.workflow import (
 )
 
 __all__ = [
+    "EVENT_TYPE_ASSIST_CLAIM",
+    "EVENT_TYPE_CONSENT_GRANTED",
+    "EVENT_TYPE_CONSENT_REVOKED",
     "EVENT_TYPE_PARCHI_ACKNOWLEDGED",
     "EVENT_TYPE_PARCHI_SEALED",
     "PARCHI_EVENT_SCHEMA_VERSION",
@@ -70,6 +81,7 @@ __all__ = [
     "AcknowledgementOutcome",
     "AcknowledgementQr",
     "AcknowledgementToken",
+    "FacilitatorClaimView",
     "ParchiAcknowledged",
     "ParchiIssue",
     "ParchiProvenance",
@@ -80,6 +92,8 @@ __all__ = [
     "TokenState",
     "WorkflowExecution",
     "acknowledge_parchi",
+    "assist_claim",
+    "build_facilitator_view",
     "create_parchi_for_worker",
     "create_parchis_for_roster",
     "describe_pending_parchi",
