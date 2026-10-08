@@ -20,7 +20,6 @@ citation, because provenance has been loudly advertised.
 
 ```
 corpus/
-├── schemas/                      JSON Schemas. Data that fails validation cannot load.
 ├── sources/
 │   ├── manifest.json             Provenance: doc_id, sha256, official URL, retrieved_at
 │   ├── <doc_id>.pdf              The EXACT downloaded bytes. Committed on purpose: it is
@@ -31,6 +30,11 @@ corpus/
 ├── stage_bands/grap_stage_bands.json   AQI→stage thresholds. THE ONLY place they may exist.
 └── invoked_stage.json            Which stage a CAQM ORDER has invoked (not computed from AQI).
 ```
+
+The JSON Schemas live with the code, in `services/aadesh_core/corpus_schemas/`, not here.
+That is deliberate: a corpus directory that shipped its own schema could weaken its own
+validation, which is the same self-certifying problem as a corpus entry declaring itself
+verified. Both are refused.
 
 ## Adding a document
 

@@ -57,11 +57,7 @@ class Violation:
 
 
 def _suppressed_lines(source: str) -> set[int]:
-    return {
-        i
-        for i, line in enumerate(source.splitlines(), start=1)
-        if SUPPRESSION_MARKER in line
-    }
+    return {i for i, line in enumerate(source.splitlines(), start=1) if SUPPRESSION_MARKER in line}
 
 
 def _numeric_literals(tree: ast.AST, path: str) -> Iterator[Violation]:
@@ -158,7 +154,5 @@ def scan_tree(root: Path, *, relative_to: Path | None = None) -> list[Violation]
     violations: list[Violation] = []
     base = relative_to or root
     for py in sorted(root.rglob("*.py")):
-        violations.extend(
-            scan_file(py, display_path=py.relative_to(base).as_posix())
-        )
+        violations.extend(scan_file(py, display_path=py.relative_to(base).as_posix()))
     return violations

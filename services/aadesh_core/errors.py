@@ -38,3 +38,7 @@ class ExplanationContractViolation(AadeshError):
 
 class TestOnlyComponentInProduction(AadeshError):
     """A component that is only safe in tests was constructed outside the test environment."""
+
+    # The leading "Test" makes pytest try to collect this as a test class. Keep the name --
+    # it is the clearest description of the failure -- and opt out of collection instead.
+    __test__ = False

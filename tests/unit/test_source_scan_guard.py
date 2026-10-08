@@ -76,10 +76,7 @@ def test_suppression_comment_is_honoured():
 
 
 def test_suppression_does_not_leak_to_other_lines():
-    source = (
-        "OK = 422  # noqa: aadesh-no-legal-literal\n"
-        "SEVERE_LOWER = 401\n"
-    )
+    source = "OK = 422  # noqa: aadesh-no-legal-literal\nSEVERE_LOWER = 401\n"
     violations = scan_source(source, path="domain/http.py")
     assert len(violations) == 1
     assert violations[0].line == 2

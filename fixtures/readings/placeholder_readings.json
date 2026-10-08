@@ -1,0 +1,23 @@
+{
+  "_warning": "This file is not a measurement of anything. Every reading in it is a synthetic placeholder with a made-up value, used so the system can be exercised before a real AQI source is wired up. Readings loaded from here are stamped provenance=synthetic and must be labelled as such wherever they appear. Do not present any number in this file as an observation of Delhi-NCR air.",
+  "provenance": "synthetic",
+  "replaces": "OpenAQ v3 / CPCB station readings, once OPENAQ_API_KEY is configured",
+  "stations": [
+    {
+      "station_id": "station-placeholder-1",
+      "label": "Placeholder station A (not a real CPCB station)",
+      "parameter": "aqi",
+      "value": 1.0,
+      "observed_at": "2026-10-08T09:00:00+00:00",
+      "ingested_at": "2026-10-08T09:05:00+00:00"
+    },
+    {
+      "station_id": "station-placeholder-2",
+      "label": "Placeholder station B (not a real CPCB station)",
+      "parameter": "aqi",
+      "value": 2.0,
+      "observed_at": "2026-10-08T09:00:00+00:00",
+      "ingested_at": "2026-10-08T09:05:00+00:00"
+    }
+  ]
+}

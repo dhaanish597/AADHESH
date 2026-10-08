@@ -191,8 +191,7 @@ def void(parchi: Parchi, *, reason: str, now: datetime) -> Parchi:
     """Cancel a parchi that has not been sealed."""
     if parchi.is_terminal:
         raise IllegalParchiTransition(
-            f"Cannot void parchi {parchi.parchi_id}: it is {parchi.state.value}, "
-            f"which is terminal."
+            f"Cannot void parchi {parchi.parchi_id}: it is {parchi.state.value}, which is terminal."
         )
     return replace(parchi, state=ParchiState.VOID, void_reason=reason, sealed_at=now)
 

@@ -43,14 +43,16 @@ def test_no_hardcoded_legal_data_in_guarded_core_paths(core_root, relative):
 
 
 def test_no_currency_symbol_anywhere_in_the_core(core_root):
-    violations = [v for v in scan_tree(core_root, relative_to=core_root.parent)
-                  if v.kind == "currency-symbol"]
+    violations = [
+        v for v in scan_tree(core_root, relative_to=core_root.parent) if v.kind == "currency-symbol"
+    ]
     assert violations == [], "\n".join(map(str, violations))
 
 
 def test_no_money_named_constant_anywhere_in_the_core(core_root):
-    violations = [v for v in scan_tree(core_root, relative_to=core_root.parent)
-                  if v.kind == "money-constant"]
+    violations = [
+        v for v in scan_tree(core_root, relative_to=core_root.parent) if v.kind == "money-constant"
+    ]
     assert violations == [], "\n".join(map(str, violations))
 
 
