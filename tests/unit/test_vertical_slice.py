@@ -25,7 +25,7 @@ from aadesh_adapters.corpus.local_file import LocalFileCorpus
 from aadesh_core.domain import ObligationStatus, Principal, Provenance, SiteProfile
 from aadesh_core.errors import IllegalParchiTransition
 from aadesh_core.explanation import check_explanation, context_for, explain_set
-from aadesh_core.parchi import acknowledge, issue, open_parchi
+from aadesh_core.parchi import acknowledge, issue, open_parchi, seal
 from aadesh_core.ports.authz import AuthzResource, EntityRef
 from aadesh_core.resolver import resolve_obligations
 from aadesh_core.stages import derive_implied_stage
@@ -197,7 +197,9 @@ def test_full_chain_from_cited_corpus_to_sealed_parchi(sourced_corpus, reading, 
 
     # 5. the worker acknowledges their own, and it seals
     assert authz.authorize(principal=WORKER, action="AckParchi", resource=resource).allowed
-    sealed = acknowledge(parchi, actor_worker_id="wrk-1", now=LATER)
+    acknowledged = acknowledge(parchi, actor_worker_id="wrk-1", now=LATER)
+    assert acknowledged.acknowledged_by == "wrk-1"
+    sealed = seal(acknowledged, now=LATER)
     assert sealed.content_hash is not None
     assert sealed.order_sha256 == result_set.stage.order_sha256
 

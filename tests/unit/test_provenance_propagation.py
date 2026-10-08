@@ -13,8 +13,8 @@ from __future__ import annotations
 
 import pytest
 
-from aadesh_core.domain import Provenance
-from aadesh_core.parchi import acknowledge, issue, open_parchi
+from aadesh_core.domain import ParchiState, Provenance
+from aadesh_core.parchi import acknowledge, issue, open_parchi, seal
 from aadesh_core.resolver import resolve_obligations
 from tests.support.builders import FIXED_NOW, invoked_stage, obligation, reading, site
 
@@ -67,7 +67,13 @@ def test_provenance_survives_the_whole_chain_into_a_sealed_parchi(provenance):
         displaced_worker_days=1,
         now=FIXED_NOW,
     )
-    sealed = acknowledge(issue(parchi, now=FIXED_NOW), actor_worker_id="worker-001", now=LATER)
+    # Acknowledge and seal are separate acts now; this test is about the provenance that
+    # survives BOTH, so it walks the whole lifecycle rather than stopping at the first step.
+    sealed = seal(
+        acknowledge(issue(parchi, now=FIXED_NOW), actor_worker_id="worker-001", now=LATER),
+        now=LATER,
+    )
+    assert sealed.state is ParchiState.SEALED
     assert sealed.provenance is provenance
 
 

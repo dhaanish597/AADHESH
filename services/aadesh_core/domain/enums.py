@@ -70,12 +70,55 @@ class ObligationStatus(StrEnum):
 
 
 class ParchiState(StrEnum):
-    """Lifecycle of a worker's parchi."""
+    """Lifecycle of a worker's parchi.
+
+    ```
+    DRAFT --issue--> PENDING_ACK --acknowledge--> ACKNOWLEDGED --seal--> SEALED
+      |                   |                             |
+      +-------void--------+------------void-------------+--> VOID
+    ```
+
+    ACKNOWLEDGED and SEALED are separate states on purpose. ACKNOWLEDGED means a named
+    worker has confirmed the halt that displaced them; SEALED means the record has been
+    frozen over a content hash. Merging them would make "the worker confirmed it" and "the
+    evidence was frozen" the same timestamp, and neither would then be independently
+    auditable.
+
+    SEALED and VOID are terminal -- no transition leaves them.
+    """
 
     DRAFT = "draft"
+    """Opened, not yet waiting on anybody."""
+
     PENDING_ACK = "pending_ack"
+    """Issued and waiting on its named worker."""
+
+    ACKNOWLEDGED = "acknowledged"
+    """The named worker has explicitly confirmed it. Not yet frozen."""
+
     SEALED = "sealed"
+    """Frozen over a content hash. Terminal. Immutable evidence."""
+
     VOID = "void"
+    """Cancelled before sealing. Terminal."""
+
+
+class AcknowledgementMethod(StrEnum):
+    """HOW a worker confirmed a parchi.
+
+    A closed vocabulary rather than free text, because this value ends up inside the sealed
+    content hash: an acknowledgement that says only "confirmed, somehow" is not evidence of
+    a method, and a free-text field would let a caller assert one that never happened.
+
+    There is exactly one member today. It is here rather than as a bare string so the field
+    is closed by construction, and adding a second mechanism is a visible, reviewable change
+    that must also update the evidence schema.
+    """
+
+    QR_CONFIRMED = "qr_confirmed"
+    """The worker resolved the opaque acknowledgement token and then took the explicit
+    confirm action. NOTE: displaying a QR, or scanning one, is not this. The confirm action
+    is what produces this value."""
 
 
 class Role(StrEnum):

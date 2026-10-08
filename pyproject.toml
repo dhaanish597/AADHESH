@@ -38,6 +38,7 @@ ingest = [
 [project.scripts]
 aadesh-verify = "aadesh_cli.verify:main"
 aadesh-corpus = "aadesh_cli.corpus:main"
+aadesh-parchi = "aadesh_cli.parchi:main"
 
 [tool.hatch.build.targets.wheel]
 packages = [

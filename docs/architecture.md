@@ -23,17 +23,20 @@ effect crosses a `typing.Protocol` port in `aadesh_core/ports/`.
 services/
 ├── aadesh_core/          ← pure. imports nothing but stdlib + jsonschema types
 │   ├── domain/           value objects, enums, the UNKNOWN_FACT sentinel
-│   ├── ports/            8 Protocols: the only way out
+│   ├── ports/            13 Protocols: the only way out
 │   ├── resolver/         site × stage × corpus → ObligationSet   (pure function)
-│   ├── parchi.py         DRAFT → PENDING_ACK → SEALED            (pure transitions)
+│   ├── parchi.py         DRAFT → PENDING_ACK → ACKNOWLEDGED → SEALED | VOID
+│   ├── parchi_ack/       tokens, roster, events, the service, the workflow contract
 │   ├── stages.py         invoked vs implied, from cited bands only
 │   ├── verification/     re-prove citations against hashed bytes
 │   ├── explanation/      the output contract + deterministic text
 │   └── corpus_schemas/   JSON Schemas (with the CODE, not the corpus)
 ├── aadesh_adapters/      ← everything that touches the world
 │   ├── sources/          PDF bytes → citable page text (pypdf, imported lazily)
+│   ├── store/            parchi store, acknowledgement tokens, idempotency ledger
+│   ├── audit/            audit records, rendered as flat text
 │   └── corpus/           the join between verification and resolution
-└── aadesh_cli/           make verify, and the corpus ingestion CLI
+└── aadesh_cli/           `aadesh-verify`, `aadesh-corpus`, and `aadesh-parchi`
 ```
 
 A Lambda handler and the local HTTP server are both thin adapters calling the same core
@@ -58,6 +61,33 @@ Bedrock gets two jobs: render an already-computed result into plain language, an
 question by citing already-computed results. Its output is checked against
 `aadesh_core.explanation.check_explanation` before a user sees it. **The model can be entirely
 unavailable and Aadesh still works.**
+
+## The acknowledgement path
+
+`parchi.py` holds the transitions and nothing else: `DRAFT → PENDING_ACK → ACKNOWLEDGED →
+SEALED`, with `VOID` reachable from any non-terminal state. `parchi_ack/service.py` holds the
+only code that may move a record along it, because each move has a rule that the pure
+transition cannot express on its own.
+
+Three properties are load-bearing, and each has a mechanism rather than an intention:
+
+| Property | Mechanism |
+|---|---|
+| Only the named worker can confirm | The actor is compared to `parchi.worker_id` **before** the idempotency ledger is consulted, so the rule applies to replays too |
+| A link is single-use, and a double tap is one fact | `AcknowledgementTokenStore.consume` is a compare-and-set; `IdempotencyLedger.execute_once` runs the confirmation at most once per token hash and hands every later caller the first result |
+| Two workflow retries cannot open two parches for one worker | `ParchiAckStore.save_new` is a conditional create on `idempotency_key`; the loser writes nothing and reads back the winner |
+
+**The QR payload is `aadesh://ack/<token>` and nothing more.** No worker id, no parchi id, no
+site, no JSON, no name, no contact detail. The token is 256 bits of `secrets.token_urlsafe`,
+stored only as a SHA-256 hash; audits carry a 16-character reference derived from that hash, so
+a dump of the database or the audit log yields no usable links. Rejections are uniform: the
+caller sees one sentence whatever went wrong, and the reason is a separate field the caller is
+never shown, so the error cannot be used to probe for valid tokens.
+
+Sealing is deliberately unreachable from `PENDING_ACK`. If it were reachable, a supervisor
+could produce a sealed record that no worker ever confirmed -- which is the one thing the
+parchi exists to make impossible. There is no edit, amend, or update operation anywhere: a
+correction is a new record.
 
 ## AWS resources planned
 
@@ -105,12 +135,19 @@ convenience — it is what lets a judge clone the repo cold and run the central 
 
 ## Known gaps
 
-- **No authoritative CAQM source is encoded.** The corpus is empty and `make verify` fails.
-  This is the top blocker and it is not an engineering one. The ingestion mechanism
-  (`make corpus`) is built and tested, but has never been run against a real CAQM order,
-  because no order has been downloaded. The first real run is untested against real PDFs —
-  pypdf's extraction of a scanned annexure or a two-column gazette page is the likely
-  surprise.
+- **No CAQM invocation is in force.** The corpus carries 3 source documents and 14 verified
+  citations, and `make verify` re-proves every one of them against hashed bytes. But the only
+  invoked stage on record — Stage III, invoked 16 January 2026 — was **revoked on 22 January
+  2026**, so `invoked_stage()` returns None and nothing in this system is enforcing anything
+  today. That is the corpus being honest, not a gap in the corpus. Anything demonstrated end
+  to end therefore has to replay that revoked invocation and label it as replay, which
+  `aadesh-parchi` does. **No monetary entitlement amount is verified anywhere**, so nothing
+  computes or displays one; records carry references to cited clauses only.
 - **SAM CLI is not installed** on the current dev machine, so `sam local` is untested.
 - **AWS adapters are not written** beyond the ports they will satisfy. Deliberate: the core
-  slice had to work locally first.
+  slice had to work locally first. The in-memory store, token store and ledger are the same
+  interfaces a DynamoDB adapter will satisfy, and are single-process only — see
+  `ports/parchi_ack.py` for what a real implementation must guarantee.
+- **No HTTP surface yet.** `aadesh-parchi` is a CLI over the same core calls a Lambda handler
+  will make. Authorization (Cedar) is not wired into the acknowledgement path; the identity
+  rule it does enforce is the domain rule, not the access-control one.
