@@ -16,7 +16,7 @@ import pytest
 from aadesh_core.domain import ParchiState, Provenance
 from aadesh_core.parchi import acknowledge, issue, open_parchi, seal
 from aadesh_core.resolver import resolve_obligations
-from tests.support.builders import FIXED_NOW, invoked_stage, obligation, reading, site
+from tests.support.builders import FIXED_NOW, invoked_stage, obligation, reading, site, snapshot
 
 LATER = FIXED_NOW.replace(hour=11)
 
@@ -24,8 +24,7 @@ LATER = FIXED_NOW.replace(hour=11)
 def _resolved(provenance: Provenance):
     return resolve_obligations(
         site=site(),
-        stage=invoked_stage(),
-        obligations=[obligation()],
+        corpus=snapshot(stage=invoked_stage(), obligations=[obligation()]),
         reading=reading(provenance=provenance),
         now=FIXED_NOW,
     )
@@ -42,8 +41,7 @@ def test_obligation_set_without_a_reading_has_no_provenance():
     """Absent, not assumed. There is no default provenance to fall back on."""
     result_set = resolve_obligations(
         site=site(),
-        stage=invoked_stage(),
-        obligations=[obligation()],
+        corpus=snapshot(stage=invoked_stage(), obligations=[obligation()]),
         reading=None,
         now=FIXED_NOW,
     )

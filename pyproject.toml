@@ -39,6 +39,7 @@ ingest = [
 aadesh-verify = "aadesh_cli.verify:main"
 aadesh-corpus = "aadesh_cli.corpus:main"
 aadesh-parchi = "aadesh_cli.parchi:main"
+aadesh-resolve = "aadesh_cli.resolve:main"
 
 [tool.hatch.build.targets.wheel]
 packages = [

@@ -51,22 +51,31 @@ class SourceState(StrEnum):
 
 
 class ObligationStatus(StrEnum):
-    """The outcome of evaluating one obligation against one site profile.
-
-    Note carefully what MET and NOT_MET mean here. They describe whether the obligation's
-    trigger condition is satisfied -- that is, whether the obligation APPLIES to this site --
-    not whether the site is in compliance. Aadesh never judges compliance; it says which
-    clauses apply and cites them.
-    """
+    """Compliance with one applicable cited requirement, based on recorded facts only."""
 
     MET = "met"
-    """The trigger condition holds. This obligation applies to this site at this stage."""
+    """Known facts satisfy the applicable requirement."""
 
     NOT_MET = "not_met"
-    """The trigger condition was evaluated and does not hold. Known, not assumed."""
+    """Known facts establish a violation of the applicable requirement."""
 
     UNKNOWN = "unknown"
-    """A fact needed to decide is missing or itself unknown. Never inferred as NOT_MET."""
+    """Applicability or compliance cannot be determined. Never inferred as a violation."""
+
+    NOT_APPLICABLE = "not_applicable"
+    """The verified stage or known site facts put this requirement out of scope."""
+
+
+class ResolutionMode(StrEnum):
+    CURRENT = "CURRENT"
+    REPLAY = "REPLAY"
+
+
+class StageAgreement(StrEnum):
+    ALIGNED = "ALIGNED"
+    DISCREPANCY = "DISCREPANCY"
+    OFFICIAL_ONLY = "OFFICIAL_ONLY"
+    NO_OFFICIAL_INVOCATION = "NO_OFFICIAL_INVOCATION"
 
 
 class ParchiState(StrEnum):
@@ -127,3 +136,74 @@ class Role(StrEnum):
     SUPERVISOR = "supervisor"
     WORKER = "worker"
     FACILITATOR = "facilitator"
+
+
+class StandingOrderStatus(StrEnum):
+    """Lifecycle of a signed, time-bounded standing order.
+
+    Transitions are pure functions of the current order and explicit actions; expiry is
+    computed from the clock at evaluation time, not written by a sweeper. See
+    `aadesh_core.standing_order.lifecycle.project_status`.
+    """
+
+    DRAFT = "draft"
+    """Written but not yet signed by the named supervisor. May be edited freely."""
+
+    CONFIRMED = "confirmed"
+    """Signed by the supervisor. commitment_hash is now fixed over the signed fields."""
+
+    ACTIVE = "active"
+    """now >= valid_from and now < valid_until. Eligible to be triggered by its trigger."""
+
+    TRIGGERED = "triggered"
+    """A trigger event matched this order and the machine was started."""
+
+    COMPLETED = "completed"
+    """The machine reached Audit and reported its outcome."""
+
+    EXPIRED = "expired"
+    """now >= valid_until. Reachable from any non-terminal status; the only closure that a
+    timer would have provided, but computed on demand rather than by a frontend timer."""
+
+
+class StandingOrderAction(StrEnum):
+    """The closed action vocabulary a standing order may pre-commit to.
+
+    Exactly two, matching the product example: a dust-work halt and one parchi per rostered
+    worker. Nothing speculative. A standing order is not a general autonomous-agent permission,
+    and the schema's additionalProperties: false plus this closed enum are what make that
+    claim testable.
+    """
+
+    ISSUE_HALT = "issue_halt"
+    """Issue the dust-work halt for the order's site."""
+
+    OPEN_PARCHI_PER_WORKER = "open_parchi_per_worker"
+    """Open one DRAFT parchi for each rostered worker on the order's site."""
+
+
+class TriggerType(StrEnum):
+    """What kind of event may trigger a standing order.
+
+    A single member on purpose. An unknown trigger type is refused rather than silently read
+    as a stage trigger, because a StandingOrder carries no field that could carry a prompt,
+    instruction, script or arbitrary agent instruction.
+    """
+
+    OFFICIAL_STAGE_INVOCATION = "official_stage_invocation"
+    """The currently invoked GRAP stage, as proved by the corpus, matched the order's trigger."""
+
+
+class StageMatch(StrEnum):
+    """How strictly the trigger's stage must match the invoked stage.
+
+    The corpus's own rule (lower-stage obligations continue at higher stages) is made explicit
+    here as a per-order choice the supervisor signs. EXACT requires the invoked stage to equal
+    the trigger stage; AT_OR_ABOVE fires when the invoked stage is >= the trigger stage.
+    """
+
+    EXACT = "exact"
+    """The invoked stage must equal the trigger stage."""
+
+    AT_OR_ABOVE = "at_or_above"
+    """The invoked stage must be >= the trigger stage, mirroring the corpus continuation rule."""

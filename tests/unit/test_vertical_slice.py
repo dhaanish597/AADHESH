@@ -50,7 +50,7 @@ SITE = SiteProfile(
     site_id="site-001",
     entity_type="construction_site",
     nearest_station_id="station-placeholder-1",
-    facts={"has_dust_generating_activity": True},
+    facts={"in_ncr": True, "activity_in_progress": False},
 )
 WORKER = Principal(principal_id="wrk-1", role="worker")
 SUPERVISOR = Principal(principal_id="sup-1", role="supervisor", assigned_site="site-001")
@@ -81,19 +81,19 @@ def test_shipped_corpus_has_no_live_stage_so_nothing_is_applicable(shipped_corpu
 
     result_set = resolve_obligations(
         site=SITE,
-        stage=corpus.invoked_stage(),
-        obligations=corpus.obligations(),
+        corpus=corpus.snapshot(),
         reading=reading,
         now=NOW,
     )
 
     # The corpus is populated, but the only invocation on record -- January 2026's Stage III
     # -- was revoked. So no stage is currently in force, and every obligation is reported as
-    # UNKNOWN rather than silently dropped or optimistically applied.
+    # NOT_APPLICABLE rather than silently dropped or optimistically activated.
     assert result_set.stage is None
     assert result_set.results  # obligations exist and are visible
     assert result_set.applicable == ()
-    assert all(r.status is ObligationStatus.UNKNOWN for r in result_set.results)
+    assert all(r.status is ObligationStatus.NOT_APPLICABLE for r in result_set.results)
+    assert all(r.applicable is False for r in result_set.results)
     assert result_set.fully_sourced is True
     assert "No GRAP stage is invoked" in explain_set(result_set).text
 
@@ -148,8 +148,7 @@ def test_full_chain_from_cited_corpus_to_sealed_parchi(sourced_corpus, reading, 
     # 1. resolve, deterministically
     result_set = resolve_obligations(
         site=SITE,
-        stage=sourced_corpus.invoked_stage(),
-        obligations=sourced_corpus.obligations(),
+        corpus=sourced_corpus.snapshot(),
         reading=reading,
         now=NOW,
     )

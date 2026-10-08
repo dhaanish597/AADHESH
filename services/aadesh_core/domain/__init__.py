@@ -2,19 +2,21 @@
 
 from __future__ import annotations
 
+from aadesh_core.domain.construction import ConstructionSite
 from aadesh_core.domain.enums import (
     AcknowledgementMethod,
     InvocationLifecycle,
     ObligationStatus,
     ParchiState,
     Provenance,
+    ResolutionMode,
     Role,
     SourceState,
+    StageAgreement,
 )
-from aadesh_core.domain.facts import UNKNOWN_FACT, is_known
+from aadesh_core.domain.facts import MISSING_FACT, UNKNOWN_FACT, is_known
 from aadesh_core.domain.models import (
     CONSTRUCTION_SITE,
-    MISSING_FACT,
     Citation,
     Entitlement,
     EntitlementAmount,
@@ -25,13 +27,17 @@ from aadesh_core.domain.models import (
     ObligationResult,
     ObligationSet,
     Principal,
+    ReplayContext,
+    ResolutionResult,
     SiteProfile,
     SourceDocument,
     StageBand,
     StageStatus,
     StationReading,
+    VerifiedCorpus,
     Worker,
 )
+from aadesh_core.domain.predicates import Predicate
 
 __all__ = [
     "CONSTRUCTION_SITE",
@@ -39,6 +45,7 @@ __all__ = [
     "UNKNOWN_FACT",
     "AcknowledgementMethod",
     "Citation",
+    "ConstructionSite",
     "Entitlement",
     "EntitlementAmount",
     "ExcludedObligation",
@@ -50,15 +57,21 @@ __all__ = [
     "ObligationSet",
     "ObligationStatus",
     "ParchiState",
+    "Predicate",
     "Principal",
     "Provenance",
+    "ReplayContext",
+    "ResolutionMode",
+    "ResolutionResult",
     "Role",
     "SiteProfile",
     "SourceDocument",
     "SourceState",
+    "StageAgreement",
     "StageBand",
     "StageStatus",
     "StationReading",
+    "VerifiedCorpus",
     "Worker",
     "is_known",
 ]

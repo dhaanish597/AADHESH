@@ -28,7 +28,7 @@ from aadesh_core.domain.enums import (
     StandingOrderStatus,
     TriggerType,
 )
-from aadesh_core.parchi import acknowledge, compute_content_hash, issue, open_parchi
+from aadesh_core.parchi import acknowledge, compute_content_hash, issue, open_parchi, seal
 from aadesh_core.stages import InvokedStage
 from aadesh_core.standing_order.models import (
     StageInvocationTrigger,
@@ -324,7 +324,15 @@ def test_sealed_parchi_ids_are_stable_across_a_redelivery() -> None:
         now=NOW,
     )
     issued = issue(parchi, now=NOW)
-    sealed = acknowledge(issued, actor_worker_id="wrk-1", now=NOW + timedelta(minutes=1))
+    acknowledged = acknowledge(issued, actor_worker_id="wrk-1", now=NOW + timedelta(minutes=1))
+    # Prompt 5 lifecycle: DRAFT -> PENDING_ACK -> ACKNOWLEDGED -> SEALED.
+    # acknowledge() records the worker's confirmation; seal() freezes the record.
+    # A parchi MUST NOT be sealed directly from PENDING_ACK.
+    assert acknowledged.state is ParchiState.ACKNOWLEDGED
+    assert acknowledged.acknowledged_by == "wrk-1"
+    # Now seal: only ACKNOWLEDGED can be sealed, not PENDING_ACK.
+    sealed = seal(acknowledged, now=NOW + timedelta(minutes=2))
+    assert sealed.state is ParchiState.SEALED
     assert sealed.parchi_id == parchi_id
     assert sealed.content_hash == compute_content_hash(sealed)
     # The id is stable across a hypothetical redelivery: deterministic_parchi_id returns the same.
@@ -359,7 +367,10 @@ def test_a_fully_sealed_parchi_for_each_worker_is_the_terminal_outcome() -> None
             now=NOW,
         )
         issued = issue(parchi, now=NOW)
-        s = acknowledge(issued, actor_worker_id=wid, now=NOW + timedelta(minutes=1))
+        acknowledged = acknowledge(issued, actor_worker_id=wid, now=NOW + timedelta(minutes=1))
+        assert acknowledged.state is ParchiState.ACKNOWLEDGED
+        s = seal(acknowledged, now=NOW + timedelta(minutes=2))
+        assert s.state is ParchiState.SEALED
         sealed.append(s)
     assert all(p.state is ParchiState.SEALED for p in sealed)
     assert all(p.content_hash is not None for p in sealed)
