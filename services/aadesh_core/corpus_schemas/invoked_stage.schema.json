@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://aadesh.local/schemas/invoked_stage.schema.json",
   "title": "Invoked GRAP stage (rules-as-data)",
-  "description": "Which stage a CAQM ORDER has invoked, together with the verbatim sentence that invoked it. This is NOT computed from an AQI reading: an order can invoke a stage pre-emptively on a forecast, or decline to. The implied stage is derived separately from stage_bands. When the two disagree, Aadesh says so rather than choosing. The citation is mandatory because this single field decides whether any obligation in the corpus applies at all.",
+  "description": "Which stage a CAQM ORDER has invoked, together with the verbatim sentence that invoked it. This is NOT computed from an AQI reading: an order can invoke a stage pre-emptively on a forecast, or decline to. The implied stage is derived separately from stage_bands. When the two disagree, Aadesh says so rather than choosing. The citation is mandatory because this single field decides whether any obligation in the corpus applies at all. A stage may also be REVOKED by a later order; a revoked invocation carries its own revocation citation and is treated as historical/replay evidence, never as currently in force.",
   "type": "object",
   "additionalProperties": false,
   "required": ["stage", "source_doc", "page", "quote", "invoked_at"],
@@ -10,7 +10,13 @@
     "stage": {
       "type": "integer",
       "minimum": 1,
-      "description": "Stage ordinal as stated in the order. No maximum is encoded: which stages exist is declared by the corpus, not by this schema or by application code."
+      "description": "Stage ordinal as stated in the order. No maximum is encoded: which stages exist is declared by the corpus, not by this schema or by application code. The quoted sentence must itself name this stage; editing the ordinal without changing the sentence is exactly what verification catches."
+    },
+    "lifecycle": {
+      "type": "string",
+      "enum": ["active", "revoked"],
+      "default": "active",
+      "description": "Whether this invocation is currently in force (active) or was revoked by a later order (revoked). A revoked invocation is retained as historical/replay evidence and is never handed to the resolver as the live stage. Absent is treated as active so existing records keep their meaning."
     },
     "source_doc": {
       "type": "string",
@@ -21,16 +27,42 @@
     "quote": {
       "type": "string",
       "minLength": 1,
-      "description": "VERBATIM text from that page stating the stage is invoked. `make verify` re-checks it like any other citation."
+      "description": "VERBATIM text from that page stating the stage is invoked. `make verify` re-checks it like any other citation, and additionally requires it to name the stage it invokes."
     },
     "invoked_at": {
       "type": "string",
       "minLength": 1,
-      "description": "ISO-8601 instant the order took effect, as stated in the order, not as observed by a clock."
+      "description": "ISO-8601 instant the order took effect, as stated in the order, not as observed by a clock. The orders in this corpus take effect 'with immediate effect' on their issue date, so this is the effective-from instant."
+    },
+    "revocation": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Required when lifecycle is 'revoked'. The later order that revoked this invocation, cited the same way the invocation itself is.",
+      "required": ["source_doc", "page", "quote", "revoked_at"],
+      "properties": {
+        "source_doc": { "type": "string", "minLength": 1 },
+        "page": { "type": "integer", "minimum": 1 },
+        "quote": {
+          "type": "string",
+          "minLength": 1,
+          "description": "VERBATIM text from that page stating the revocation. `make verify` re-checks it like any other citation."
+        },
+        "revoked_at": {
+          "type": "string",
+          "minLength": 1,
+          "description": "ISO-8601 instant the revocation took effect, as stated in the revoking order."
+        }
+      }
     },
     "note": {
       "type": "string",
       "description": "Optional editorial note. Never the legal basis for anything; the quote is."
     }
-  }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "lifecycle": { "const": "revoked" } }, "required": ["lifecycle"] },
+      "then": { "required": ["revocation"] }
+    }
+  ]
 }

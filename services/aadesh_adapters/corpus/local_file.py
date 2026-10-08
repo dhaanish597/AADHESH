@@ -25,6 +25,7 @@ from aadesh_core.domain import (
     Citation,
     Entitlement,
     EntitlementAmount,
+    InvocationLifecycle,
     InvokedStage,
     Obligation,
     SourceDocument,
@@ -190,12 +191,33 @@ class LocalFileCorpus:
     # -- InvokedStageSource port -------------------------------------------
 
     def invoked_stage(self) -> InvokedStage | None:
-        """The stage a CAQM order has invoked, with that order's hash attached.
+        """The stage CURRENTLY in force, or None when none is.
 
-        Returns None when nothing is recorded. Raises when a stage IS recorded but its
-        citation cannot be re-proved: an unprovable invoked stage is not degraded to "nothing
-        applies", because that would silently drop every obligation in the corpus.
+        A revoked invocation is deliberately NOT returned here. It is evidence about the
+        past, and handing it to the resolver would make January's Stage III keep enforcing in
+        October -- the exact failure the lifecycle distinction exists to prevent. The replay
+        record is available from `invocation_history()`.
+
+        Raises when a stage IS recorded but its citation cannot be re-proved: an unprovable
+        invoked stage is not degraded to "nothing applies", because that would silently drop
+        every obligation in the corpus.
         """
+        invocation = self._load_invocation()
+        if invocation is None or not invocation.is_current:
+            return None
+        return invocation
+
+    def invocation_history(self) -> tuple[InvokedStage, ...]:
+        """Every invocation recorded, revoked ones included, for historical replay.
+
+        This is what lets Aadesh say "Historical replay: CAQM invoked Stage III on 16 Jan
+        2026" while `invoked_stage()` stays honestly empty.
+        """
+        invocation = self._load_invocation()
+        return () if invocation is None else (invocation,)
+
+    def _load_invocation(self) -> InvokedStage | None:
+        """Parse invoked_stage.json into a domain object, proving it or raising."""
         path = self.root / "invoked_stage.json"
         if not path.exists():
             return None
@@ -220,17 +242,20 @@ class LocalFileCorpus:
                 f"manifest. A stage invoked by an order nobody hashed cannot be cited."
             )
 
+        # Shape first, so a malformed record fails with the field name; then the proof, which
+        # is the check that actually protects the claim.
+        validate_entry(payload, "invoked_stage.schema.json", schema_dir=self._schema_dir)
+
         if not self._invoked_stage_is_proved():
             raise CorpusIntegrityError(
                 "invoked_stage.json invokes a stage that cannot be re-proved against its "
                 "source. Either the citation is missing (source_doc, page and quote copied "
-                "verbatim from that page) or the document's bytes no longer hash to the "
-                "manifest. Run `make verify` to see which. The invoked stage decides which "
-                "obligations apply at all, so an unprovable one is refused rather than "
-                "quietly applied."
+                "verbatim from that page), the quoted sentence does not name the stage it is "
+                "cited for, or the document's bytes no longer hash to the manifest. Run "
+                "`make verify` to see which. The invoked stage decides which obligations "
+                "apply at all, so an unprovable one is refused rather than quietly applied."
             )
 
-        validate_entry(payload, "invoked_stage.schema.json", schema_dir=self._schema_dir)
         try:
             invoked_at = datetime.fromisoformat(payload["invoked_at"])
         except ValueError as exc:
@@ -239,16 +264,43 @@ class LocalFileCorpus:
                 f"instant. Copy the date the order states, e.g. 2026-10-08T06:00:00+05:30."
             ) from exc
 
+        lifecycle = InvocationLifecycle(payload.get("lifecycle", InvocationLifecycle.ACTIVE))
+        revoked_at: datetime | None = None
+        revocation_citation: Citation | None = None
+        revocation = payload.get("revocation")
+        if revocation is not None:
+            try:
+                revoked_at = datetime.fromisoformat(revocation["revoked_at"])
+            except ValueError as exc:
+                raise CorpusIntegrityError(
+                    f"invoked_stage.json: revocation.revoked_at {revocation['revoked_at']!r} "
+                    f"is not an ISO-8601 instant."
+                ) from exc
+            revocation_citation = Citation(
+                source_doc=revocation["source_doc"],
+                page=revocation["page"],
+                quote=revocation["quote"],
+            )
+
         return InvokedStage(
             stage=payload["stage"],
             order_doc_id=doc_id,
             order_sha256=documents[doc_id]["sha256"],
             invoked_at=invoked_at,
+            lifecycle=lifecycle,
+            revoked_at=revoked_at,
+            revocation_citation=revocation_citation,
         )
 
     def _invoked_stage_is_proved(self) -> bool:
-        """True only if verification found and re-proved the stage's own citation."""
-        return any(c.ok and c.entry_kind == "invoked_stage" for c in self._report.citations)
+        """True only if EVERY citation the invocation carries re-proved.
+
+        Now that an invocation can carry a revocation citation as well as its own, "any"
+        would let a good revocation paper over a bad invocation. The stage is proved only when
+        all of its citations are.
+        """
+        checks = [c for c in self._report.citations if c.entry_kind == "invoked_stage"]
+        return bool(checks) and all(c.ok for c in checks)
 
 
 def reject_self_declared_provenance(entry: dict[str, Any], where: str) -> None:

@@ -30,6 +30,8 @@ import unicodedata
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from aadesh_core.sources import is_official_source_url
+
 MANIFEST = "sources/manifest.json"
 CORPUS_FILES = {
     "obligation": ("obligations/construction_site.json", "obligations", "obligation_id"),
@@ -143,6 +145,22 @@ def verify_corpus(corpus_root: Path) -> VerificationReport:
     # 1. document bytes
     page_text: dict[tuple[str, int], str] = {}
     for doc_id, doc in documents.items():
+        # A document hosted on a mirror is not the authority, even when its bytes hash to the
+        # recorded value. Refused here as well as at ingestion so that a hand-edited manifest
+        # cannot smuggle a non-official copy past the gate.
+        if not is_official_source_url(doc.get("source_url", "")):
+            unhashed.add(doc_id)
+            report.documents.append(
+                DocumentCheck(
+                    doc_id,
+                    False,
+                    f"source_url {doc.get('source_url')!r} is not on an official domain. A "
+                    f"mirror or a saved copy is not the order, so nothing it is quoted for "
+                    f"can be treated as verified.",
+                )
+            )
+            continue
+
         local = corpus_root / doc["local_path"]
         if not local.exists():
             unhashed.add(doc_id)
@@ -216,21 +234,86 @@ def verify_corpus(corpus_root: Path) -> VerificationReport:
                 )
             )
 
+        # The quote must SUPPORT the stage, not merely appear on the page. Recorded as a
+        # failing citation (not a loose error) so the loader's "proved" test sees it too and
+        # refuses the same record `make verify` rejects.
+        stage_value = entry.get("stage")
+        quote = entry.get("quote")
+        quote_misses_stage = (
+            isinstance(stage_value, int)
+            and isinstance(quote, str)
+            and bool(quote)
+            and not quote_names_stage(quote, stage_value)
+        )
+        if quote_misses_stage:
+            report.citations.append(
+                CitationCheck(
+                    kind,
+                    entry_id,
+                    str(entry.get("source_doc", "<none>")),
+                    int(entry.get("page", 0) or 0),
+                    False,
+                    f"the quoted sentence does not name stage {stage_value}. The quote "
+                    f"must state the invocation it is cited for (e.g. contain 'Stage-III' "
+                    f"or 'Stage 3'). Changing the stage without changing the sentence it "
+                    f"cites is exactly the edit this check exists to catch.",
+                )
+            )
+
     return report
 
 
 def _citations_in(entry: dict) -> list[dict]:
-    """An entry's own citation, plus any nested ones (amounts, readiness requirements)."""
+    """An entry's own citation, plus any nested ones (amounts, revocations, requirements)."""
     found: list[dict] = []
     if {"source_doc", "page", "quote"} <= entry.keys():
         found.append(entry)
     amount = entry.get("amount")
     if isinstance(amount, dict) and {"source_doc", "page", "quote"} <= amount.keys():
         found.append(amount)
+    # A revocation is a claim of its own: "a later order ended this stage". Left out here it
+    # would be the one legal fact in the corpus that nothing re-proves.
+    revocation = entry.get("revocation")
+    if isinstance(revocation, dict) and {"source_doc", "page", "quote"} <= revocation.keys():
+        found.append(revocation)
     for requirement in entry.get("readiness_requirements", []) or []:
         if isinstance(requirement, dict) and {"source_doc", "page", "quote"} <= requirement.keys():
             found.append(requirement)
     return found
+
+
+#: Roman ordinals up to Stage X. Beyond that, only the arabic form is recognised. The
+#: conversion exists so "the quote must name the stage it invokes" can be checked against the
+#: forms an order actually uses ("Stage-III" and "Stage 3" both appear in CAQM documents).
+_ROMAN_ORDINALS = {
+    1: "i",
+    2: "ii",
+    3: "iii",
+    4: "iv",
+    5: "v",
+    6: "vi",
+    7: "vii",
+    8: "viii",
+    9: "ix",
+    10: "x",
+}
+
+
+def quote_names_stage(quote: str, stage: int) -> bool:
+    """True if `quote` names `stage` as a GRAP stage, in roman or arabic form.
+
+    This is the check that makes a citation SUPPORT its claim rather than merely exist. An
+    invoked stage is the fact that decides which obligations apply; a quote that proves only
+    that some sentence about something appears on a page does not prove which stage was
+    invoked. Without this, changing `stage` from 3 to 4 while leaving the quoted sentence
+    intact -- the exact edit the corpus gate must refuse -- would pass verification.
+    """
+    text = normalise(quote)
+    ordinal = _ROMAN_ORDINALS.get(stage)
+    tokens = [f"stage-{stage}", f"stage {stage}"]
+    if ordinal:
+        tokens += [f"stage-{ordinal}", f"stage {ordinal}"]
+    return any(token in text for token in tokens)
 
 
 def _check_citation(

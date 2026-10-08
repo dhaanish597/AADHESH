@@ -1,3 +1,140 @@
 {
-  "obligations": []
+  "obligations": [
+    {
+      "obligation_id": "grap1-cd-dust-mitigation",
+      "entity_types": [
+        "construction_site"
+      ],
+      "triggers_at_stage": 1,
+      "label": "Dust mitigation measures required for C&D activity (Stage I)",
+      "field": "has_dust_generating_activity",
+      "operator": "eq",
+      "value": true,
+      "source_doc": "caqm-grap-schedule-2026-09-29",
+      "page": 2,
+      "quote": "Ensure proper implementation of Directions/ Rules/ Guidelines for enforcement of dust mitigation measures",
+      "consequence": {
+        "issues_parchi": false
+      }
+    },
+    {
+      "obligation_id": "grap1-cd-large-project-registration",
+      "entity_types": [
+        "construction_site"
+      ],
+      "triggers_at_stage": 1,
+      "label": "Large C&D projects must be registered on the state web portal (Stage I)",
+      "field": "plot_size_sqm",
+      "operator": "gte",
+      "value": 500,
+      "source_doc": "caqm-grap-schedule-2026-09-29",
+      "page": 2,
+      "quote": "do not permit C&D activities in respect of such C&D projects with plot size equal to or more than 500 sqm , which are not registered on the \u2018web portal\u2019 of the respective State / GNCTD",
+      "consequence": {
+        "issues_parchi": false
+      }
+    },
+    {
+      "obligation_id": "grap3-cd-restricted-activities",
+      "entity_types": [
+        "construction_site"
+      ],
+      "triggers_at_stage": 3,
+      "label": "Stage III: listed dust-generating C&D activities restricted across the NCR",
+      "field": "performs_restricted_cd_activity",
+      "operator": "eq",
+      "value": true,
+      "source_doc": "caqm-grap-schedule-2026-09-29",
+      "page": 11,
+      "quote": "Enforce strict restrictions on the following categories of dust generating/ air pollution causing construction and demolition ( C&D) activities in the entire NCR",
+      "consequence": {
+        "issues_parchi": true
+      }
+    },
+    {
+      "obligation_id": "grap3-cd-demolition",
+      "entity_types": [
+        "construction_site"
+      ],
+      "triggers_at_stage": 3,
+      "label": "Stage III: demolition works restricted across the NCR",
+      "field": "performs_demolition",
+      "operator": "eq",
+      "value": true,
+      "source_doc": "caqm-grap-schedule-2026-09-29",
+      "page": 11,
+      "quote": "All demolition works.",
+      "consequence": {
+        "issues_parchi": true
+      }
+    },
+    {
+      "obligation_id": "grap3-cd-piling",
+      "entity_types": [
+        "construction_site"
+      ],
+      "triggers_at_stage": 3,
+      "label": "Stage III: piling works restricted across the NCR",
+      "field": "performs_piling",
+      "operator": "eq",
+      "value": true,
+      "source_doc": "caqm-grap-schedule-2026-09-29",
+      "page": 11,
+      "quote": "Piling works.",
+      "consequence": {
+        "issues_parchi": true
+      }
+    },
+    {
+      "obligation_id": "grap3-cd-unpaved-roads",
+      "entity_types": [
+        "construction_site"
+      ],
+      "triggers_at_stage": 3,
+      "label": "Stage III: no movement of construction/C&D vehicles on unpaved roads",
+      "field": "moves_material_on_unpaved_road",
+      "operator": "eq",
+      "value": true,
+      "source_doc": "caqm-grap-schedule-2026-09-29",
+      "page": 12,
+      "quote": "Movement of vehicles carrying construction materials or C&D waste on unpaved roads.",
+      "consequence": {
+        "issues_parchi": true
+      }
+    },
+    {
+      "obligation_id": "grap3-cd-permitted-categories-only",
+      "entity_types": [
+        "construction_site"
+      ],
+      "triggers_at_stage": 3,
+      "label": "Stage III: C&D permitted only for listed exempt project categories",
+      "field": "is_permitted_cd_project_category",
+      "operator": "eq",
+      "value": false,
+      "source_doc": "caqm-grap-schedule-2026-09-29",
+      "page": 12,
+      "quote": "All C&D related activities , including those under 1(i) above , shall be continued to be permitted only for the following categories of projects",
+      "consequence": {
+        "issues_parchi": true
+      }
+    },
+    {
+      "obligation_id": "grap4-cd-linear-projects",
+      "entity_types": [
+        "construction_site"
+      ],
+      "triggers_at_stage": 4,
+      "label": "Stage IV: C&D ban extended to linear public projects",
+      "field": "is_linear_public_project",
+      "operator": "eq",
+      "value": true,
+      "source_doc": "caqm-grap-schedule-2026-09-29",
+      "page": 16,
+      "quote": "Ban C&D activities, as in the GRAP Stage- III, also for linear public projects such as highways, roads, flyo vers, overbridges, power transmission, pipelines, tele - communication etc.",
+      "consequence": {
+        "issues_parchi": true
+      }
+    }
+  ]
 }

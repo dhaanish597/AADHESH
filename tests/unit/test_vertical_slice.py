@@ -37,8 +37,10 @@ LATER = datetime(2026, 10, 8, 11, 0, tzinfo=UTC)
 PAGE_TEXT = (
     "4. All dust generating construction and demolition activities shall remain "
     "suspended in the NCR until further orders.\n"
+    "5. The Sub-Committee on GRAP hereby invokes Stage III of the GRAP in the entire NCR.\n"
 )
 VERBATIM = "dust generating construction and demolition activities shall remain suspended"
+STAGE_QUOTE = "The Sub-Committee on GRAP hereby invokes Stage III of the GRAP"
 
 SITE = SiteProfile(
     site_id="site-001",
@@ -70,7 +72,7 @@ def reading(repo_root):
 # --- against the corpus this repo actually ships ---------------------------
 
 
-def test_empty_corpus_determines_nothing_and_says_so(shipped_corpus, reading):
+def test_shipped_corpus_has_no_live_stage_so_nothing_is_applicable(shipped_corpus, reading):
     corpus = LocalFileCorpus(shipped_corpus)
 
     result_set = resolve_obligations(
@@ -81,13 +83,28 @@ def test_empty_corpus_determines_nothing_and_says_so(shipped_corpus, reading):
         now=NOW,
     )
 
-    assert result_set.results == ()
+    # The corpus is populated, but the only invocation on record -- January 2026's Stage III
+    # -- was revoked. So no stage is currently in force, and every obligation is reported as
+    # UNKNOWN rather than silently dropped or optimistically applied.
+    assert result_set.stage is None
+    assert result_set.results  # obligations exist and are visible
     assert result_set.applicable == ()
+    assert all(r.status is ObligationStatus.UNKNOWN for r in result_set.results)
+    assert result_set.fully_sourced is True
     assert "No GRAP stage is invoked" in explain_set(result_set).text
 
 
-def test_implied_stage_is_undeterminable_against_the_shipped_corpus(shipped_corpus, reading):
+def test_the_shipped_bands_exist_but_the_placeholder_reading_falls_below_them(
+    shipped_corpus, reading
+):
+    """Four cited bands are present; the placeholder reading is below the lowest of them.
+
+    "Undeterminable" here is a real answer about a value outside every band, not the old
+    "no bands are sourced yet" state. A reading that is not covered by any cited band is
+    still honestly undeterminable rather than rounded to Stage I.
+    """
     corpus = LocalFileCorpus(shipped_corpus)
+    assert len(corpus.stage_bands()) == 4
     implied = derive_implied_stage(reading=reading, bands=corpus.stage_bands())
     assert implied.is_determinable is False
 
@@ -114,7 +131,7 @@ def sourced_corpus(tmp_path):
                     "source_doc": "test-order",
                     "invoked_at": "2026-10-08T06:00:00+00:00",
                     "page": 4,
-                    "quote": VERBATIM,
+                    "quote": STAGE_QUOTE,
                 }
             }
         ),

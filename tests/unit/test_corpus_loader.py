@@ -16,7 +16,7 @@ import json
 import pytest
 
 from aadesh_adapters.corpus.local_file import LocalFileCorpus
-from aadesh_core.domain import SourceState
+from aadesh_core.domain import InvocationLifecycle, SourceState
 from aadesh_core.errors import CorpusIntegrityError
 from tests.support.corpus_builder import CorpusBuilder
 
@@ -62,12 +62,27 @@ def test_source_state_in_the_file_is_ignored(tmp_path):
         LocalFileCorpus(root).obligations()
 
 
-def test_the_shipped_corpus_loads_empty(shipped_corpus):
+def test_the_shipped_corpus_loads_fully_sourced(shipped_corpus):
+    """Every encoded obligation and band re-proved against the official CAQM bytes."""
     corpus = LocalFileCorpus(shipped_corpus)
-    assert corpus.obligations() == ()
-    assert corpus.entitlements() == ()
-    assert corpus.stage_bands() == ()
+    obligations = corpus.obligations()
+    bands = corpus.stage_bands()
+    assert obligations and all(o.source_state is SourceState.VERIFIED for o in obligations)
+    assert bands and all(b.source_state is SourceState.VERIFIED for b in bands)
+    # No stage is CURRENTLY in force: the only invocation on record was revoked in January.
     assert corpus.invoked_stage() is None
+
+
+def test_the_shipped_corpus_keeps_the_revoked_invocation_as_history(shipped_corpus):
+    """The distinction the lifecycle exists for: history is available, but never live."""
+    (invocation,) = LocalFileCorpus(shipped_corpus).invocation_history()
+    assert invocation.stage == 3
+    assert invocation.lifecycle is InvocationLifecycle.REVOKED
+    assert invocation.is_current is False
+    assert invocation.revoked_at is not None
+    assert invocation.revocation_citation is not None
+    assert "Historical replay" in invocation.describe()
+    assert "not currently in force" in invocation.describe()
 
 
 def test_a_tampered_source_unsources_every_entry_that_cites_it(tmp_path):

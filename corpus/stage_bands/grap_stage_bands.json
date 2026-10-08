@@ -1,3 +1,40 @@
 {
-  "stage_bands": []
+  "stage_bands": [
+    {
+      "stage": 1,
+      "pollutant": "AQI",
+      "aqi_lower": 201,
+      "aqi_upper": 300,
+      "source_doc": "caqm-grap-schedule-2026-09-29",
+      "page": 2,
+      "quote": "Stage I \u2013 \u2018Poor\u2019 Air Quality (DELHI AQI ranging between 201-300)"
+    },
+    {
+      "stage": 2,
+      "pollutant": "AQI",
+      "aqi_lower": 301,
+      "aqi_upper": 400,
+      "source_doc": "caqm-grap-schedule-2026-09-29",
+      "page": 9,
+      "quote": "Stage II \u2013 \u2018Very Poor\u2019 Air Quality (DELHI AQI ranging between 301-400)"
+    },
+    {
+      "stage": 3,
+      "pollutant": "AQI",
+      "aqi_lower": 401,
+      "aqi_upper": 450,
+      "source_doc": "caqm-grap-schedule-2026-09-29",
+      "page": 11,
+      "quote": "Stage III \u2013 \u2018Severe\u2019 Air Quality (DELHI AQI ranging between 401-450)"
+    },
+    {
+      "stage": 4,
+      "pollutant": "AQI",
+      "aqi_lower": 451,
+      "aqi_upper": null,
+      "source_doc": "caqm-grap-schedule-2026-09-29",
+      "page": 16,
+      "quote": "Stage IV \u2013 \u2018Severe +\u2019 Air Quality (DELHI AQI > 450)"
+    }
+  ]
 }

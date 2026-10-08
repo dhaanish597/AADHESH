@@ -50,6 +50,7 @@ from aadesh_adapters.corpus.local_file import (
 )
 from aadesh_adapters.sources.pdf_text import SourceExtractionError, extract_pages
 from aadesh_core.errors import AadeshError, CorpusIntegrityError
+from aadesh_core.sources import is_official_source_url
 from aadesh_core.verification import normalise
 
 DEFAULT_CORPUS = Path("corpus")
@@ -153,6 +154,14 @@ def ingest_document(
             f"doc_id {doc_id!r} is not a kebab-case slug (lowercase letters, digits and "
             f"single hyphens, e.g. caqm-grap-2026-01). It becomes a filename, so anything "
             f"with a slash, a space or a dot in it is refused."
+        )
+
+    if not is_official_source_url(source_url):
+        raise SourceRejected(
+            f"source_url {source_url!r} is not on an official CAQM domain. A mirror, a news "
+            f"article or a saved copy is not the order -- even when the bytes match, the copy "
+            f"is not the authority. Download the document from the Commission itself and "
+            f"record that URL."
         )
 
     if not pdf_path.exists():
@@ -279,6 +288,9 @@ def _labelled_citations(entry: dict[str, Any]) -> list[tuple[str, dict[str, Any]
     amount = entry.get("amount")
     if isinstance(amount, dict) and CITATION_KEYS.issubset(amount):
         found.append(("amount", amount))
+    revocation = entry.get("revocation")
+    if isinstance(revocation, dict) and CITATION_KEYS.issubset(revocation):
+        found.append(("revocation", revocation))
     for requirement in entry.get("readiness_requirements") or []:
         if isinstance(requirement, dict) and CITATION_KEYS.issubset(requirement):
             found.append(("readiness requirement", requirement))
@@ -396,6 +408,16 @@ def build_parser() -> argparse.ArgumentParser:
     invoke.add_argument("--page", required=True, type=int)
     invoke.add_argument("--quote", required=True, help="verbatim, from that page")
     invoke.add_argument("--invoked-at", default=None, help="ISO-8601. Defaults to now (UTC).")
+    invoke.add_argument(
+        "--lifecycle",
+        choices=["active", "revoked"],
+        default="active",
+        help="'revoked' records a HISTORICAL invocation that must also cite its revocation",
+    )
+    invoke.add_argument("--revocation-doc-id", default=None, help="the order that revoked it")
+    invoke.add_argument("--revocation-page", type=int, default=None)
+    invoke.add_argument("--revocation-quote", default=None, help="verbatim, from that page")
+    invoke.add_argument("--revoked-at", default=None, help="ISO-8601 instant of revocation")
     invoke.add_argument("--note", default="")
 
     return parser
@@ -450,16 +472,27 @@ def invoke_stage(
     quote: str,
     invoked_at: str | None = None,
     note: str = "",
+    lifecycle: str = "active",
+    revocation: dict[str, Any] | None = None,
 ) -> Path:
     """Record which stage an order has invoked, with the sentence that invoked it.
 
     This is the fact the whole system hangs on: no invoked stage, no applicable obligation.
     So it is written the same way everything else is -- quoted, checked, and refused if the
     quote is not where it says it is.
+
+    Pass ``lifecycle="revoked"`` together with a ``revocation`` citation to record a stage
+    that a later order ended. That record is HISTORICAL: the loader will not hand it to the
+    resolver as the live stage, so a revoked invocation can never keep enforcing.
     """
     corpus_root = Path(corpus_root)
     if stage < 1:
         raise EntryRejected(f"stage {stage} is not a stage ordinal; expected an integer >= 1")
+    if lifecycle not in ("active", "revoked"):
+        raise EntryRejected(
+            f"lifecycle {lifecycle!r} is not 'active' or 'revoked'. Which of the two a record "
+            f"is decides whether it is treated as current, so it may not be guessed."
+        )
 
     payload = {
         "stage": int(stage),
@@ -468,6 +501,20 @@ def invoke_stage(
         "quote": quote,
         "invoked_at": invoked_at or datetime.now(UTC).isoformat(),
     }
+    if lifecycle == "revoked":
+        if not revocation:
+            raise EntryRejected(
+                "a revoked invocation must carry its own revocation citation (source_doc, "
+                "page and quote from the later order). 'It was revoked' is a legal fact like "
+                "any other and cannot be taken on trust."
+            )
+        payload["lifecycle"] = "revoked"
+        payload["revocation"] = {
+            "source_doc": revocation["source_doc"],
+            "page": int(revocation["page"]),
+            "quote": revocation["quote"],
+            "revoked_at": revocation.get("revoked_at") or datetime.now(UTC).isoformat(),
+        }
     if note:
         payload["note"] = note
 
@@ -492,6 +539,21 @@ def invoke_stage(
 
 
 def _do_invoke(args: argparse.Namespace) -> None:
+    revocation = None
+    if args.lifecycle == "revoked":
+        if not (args.revocation_doc_id and args.revocation_page and args.revocation_quote):
+            raise EntryRejected(
+                "--lifecycle revoked requires --revocation-doc-id, --revocation-page and "
+                "--revocation-quote. A revocation with no citation is an assertion, and the "
+                "whole point of this corpus is that assertions do not enter it."
+            )
+        revocation = {
+            "source_doc": args.revocation_doc_id,
+            "page": args.revocation_page,
+            "quote": args.revocation_quote,
+            "revoked_at": args.revoked_at,
+        }
+
     written = invoke_stage(
         corpus_root=Path(args.corpus),
         stage=args.stage,
@@ -500,6 +562,8 @@ def _do_invoke(args: argparse.Namespace) -> None:
         quote=args.quote,
         invoked_at=args.invoked_at,
         note=args.note,
+        lifecycle=args.lifecycle,
+        revocation=revocation,
     )
     print(f"WROTE invoked stage -> {written}")
     print("")

@@ -37,9 +37,19 @@ class SourceDocumentStore(Protocol):
 @runtime_checkable
 class InvokedStageSource(Protocol):
     def invoked_stage(self) -> InvokedStage | None:
-        """The stage currently invoked by a CAQM order, or None if none is recorded.
+        """The stage CURRENTLY in force, or None if none is.
 
-        None means "no order in the corpus invokes a stage", which the resolver treats as
-        UNKNOWN rather than as "nothing applies".
+        None means "no order in the corpus invokes a stage" (or the only invocation on record
+        has been revoked). The resolver treats that as UNKNOWN rather than as "nothing
+        applies". A revoked invocation is never returned here.
+        """
+        ...
+
+    def invocation_history(self) -> tuple[InvokedStage, ...]:
+        """Every invocation on record, revoked ones included, for historical replay.
+
+        This is deliberately separate from `invoked_stage()`: keeping them apart is what makes
+        it impossible to confuse "the stage CAQM invoked last January" with "the stage in
+        force now".
         """
         ...

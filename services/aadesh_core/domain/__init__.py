@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from aadesh_core.domain.enums import (
+    InvocationLifecycle,
     ObligationStatus,
     ParchiState,
     Provenance,
@@ -40,6 +41,7 @@ __all__ = [
     "EntitlementAmount",
     "ExcludedObligation",
     "ImpliedStage",
+    "InvocationLifecycle",
     "InvokedStage",
     "Obligation",
     "ObligationResult",

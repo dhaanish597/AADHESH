@@ -38,7 +38,11 @@ from tests.support.pdf_builder import make_pdf
 
 PAGE_ONE = "dust generating construction activities shall remain suspended"
 PAGE_TWO = "the Authority's direction issued under section 5 shall be complied with"
+#: An invocation's quote must name the stage it invokes, so it cannot reuse a plain
+#: obligation sentence. This is the sentence the stage-invocation tests quote.
+STAGE_PAGE = "The Sub-Committee on GRAP hereby invokes Stage III of the GRAP in the entire NCR"
 URL = "https://caqm.nic.in/orders/example-order.pdf"
+MIRROR_URL = "https://example-mirror.invalid/orders/caqm-order.pdf"
 
 
 def read_json(path: Path) -> dict:
@@ -177,6 +181,18 @@ class TestIngestDocument:
                 doc_id="order-a",
                 source_url=URL,
             )
+
+    def test_refuses_a_non_official_mirror_url(self, tmp_path, pdf):
+        """A mirror is not the authority, even when its bytes look right."""
+        corpus = tmp_path / "corpus"
+        with pytest.raises(IngestError, match="official"):
+            ingest_document(
+                corpus_root=corpus,
+                pdf_path=pdf,
+                doc_id="order-a",
+                source_url=MIRROR_URL,
+            )
+        assert manifest_of(corpus) == []
 
 
 class TestAddEntry:
@@ -354,7 +370,7 @@ class TestInvokeStage:
         return (
             CorpusBuilder(tmp_path / "corpus")
             .with_document(doc_id="order-a")
-            .with_page(doc_id="order-a", page=2, text=PAGE_ONE)
+            .with_page(doc_id="order-a", page=2, text=STAGE_PAGE)
             .build()
         )
 
@@ -366,7 +382,7 @@ class TestInvokeStage:
             stage=3,
             source_doc="order-a",
             page=2,
-            quote=PAGE_ONE,
+            quote=STAGE_PAGE,
             invoked_at="2026-10-08T06:00:00+05:30",
         )
         assert not verify_corpus(corpus).has_failures
@@ -391,16 +407,20 @@ class TestInvokeStage:
                 stage=3,
                 source_doc="order-z",
                 page=2,
-                quote=PAGE_ONE,
+                quote=STAGE_PAGE,
             )
 
     def test_refuses_a_page_with_no_extracted_text(self, corpus):
         with pytest.raises(EntryRejected, match="page 6"):
-            invoke_stage(corpus_root=corpus, stage=3, source_doc="order-a", page=6, quote=PAGE_ONE)
+            invoke_stage(
+                corpus_root=corpus, stage=3, source_doc="order-a", page=6, quote=STAGE_PAGE
+            )
 
     def test_refuses_a_stage_ordinal_below_one(self, corpus):
         with pytest.raises(EntryRejected, match="ordinal"):
-            invoke_stage(corpus_root=corpus, stage=0, source_doc="order-a", page=2, quote=PAGE_ONE)
+            invoke_stage(
+                corpus_root=corpus, stage=0, source_doc="order-a", page=2, quote=STAGE_PAGE
+            )
 
     def test_the_cli_exits_with_the_quote_code(self, corpus, capsys):
         code = main(

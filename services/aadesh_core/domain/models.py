@@ -12,7 +12,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from typing import Any
 
-from aadesh_core.domain.enums import ObligationStatus, Provenance, SourceState
+from aadesh_core.domain.enums import InvocationLifecycle, ObligationStatus, Provenance, SourceState
 
 CONSTRUCTION_SITE = "construction_site"
 """The only entity type in scope. Deliberately a single value."""
@@ -85,12 +85,41 @@ class InvokedStage:
     any downstream claim can be traced to specific bytes. CAQM may invoke pre-emptively on a
     forecast or hold off despite a high reading, which is exactly why this is not computed
     from an AQI number.
+
+    `lifecycle` distinguishes the CURRENT official state from a HISTORICAL one. A revoked
+    invocation is evidence about the past, not a stage in force, so `is_current` is False for
+    it and the loader refuses to hand it to the resolver as the live stage. The revocation
+    itself is cited (`revocation_citation`), so "it was revoked" is provable rather than
+    asserted -- the same rule every other fact in this corpus obeys.
     """
 
     stage: int
     order_doc_id: str
     order_sha256: str
     invoked_at: datetime
+    lifecycle: InvocationLifecycle = InvocationLifecycle.ACTIVE
+    revoked_at: datetime | None = None
+    revocation_citation: Citation | None = None
+
+    @property
+    def is_current(self) -> bool:
+        """True only for a stage presently in force. A revoked invocation is history."""
+        return self.lifecycle is InvocationLifecycle.ACTIVE
+
+    def describe(self) -> str:
+        """A single honest sentence about what this record is.
+
+        The distinction this makes is the entire reason the lifecycle exists: without it,
+        January's revoked Stage III and a live Stage III read identically on screen.
+        """
+        when = self.invoked_at.date().isoformat()
+        if self.is_current:
+            return f"Current: CAQM invoked Stage {self.stage} on {when}."
+        revoked = f", revoked {self.revoked_at.date().isoformat()}" if self.revoked_at else ""
+        return (
+            f"Historical replay: CAQM invoked Stage {self.stage} on {when}{revoked}. "
+            f"This stage is not currently in force."
+        )
 
 
 @dataclass(frozen=True, slots=True)

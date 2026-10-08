@@ -1,3 +1,37 @@
 {
-  "documents": []
+  "documents": [
+    {
+      "doc_id": "caqm-grap-schedule-2026-09-29",
+      "title": "Revised Graded Response Action Plan (GRAP) for NCR - Revision 29.09.2026",
+      "publisher": "Commission for Air Quality Management in NCR and Adjoining Areas",
+      "source_url": "https://caqm.nic.in/FileUploadDomain/WebsiteDocument/GRAP/GRAP%20Schedule/01fcdebf-83e1-4cfe-bc0c-d0b1470a4d4e.pdf",
+      "retrieved_at": "2026-10-08T09:37:31.831368+00:00",
+      "sha256": "473e245b758c68be776b1d732be288abdbb5bd9084abf8fcdde9bcd3afcfa413",
+      "byte_size": 767528,
+      "local_path": "sources/caqm-grap-schedule-2026-09-29.pdf",
+      "pages_dir": "sources/pages/caqm-grap-schedule-2026-09-29"
+    },
+    {
+      "doc_id": "caqm-grap-stage3-order-2026-01-16",
+      "title": "Order dated 16.01.2026 - Invocation of actions under Stage III of schedule of GRAP",
+      "publisher": "Commission for Air Quality Management in NCR and Adjoining Areas",
+      "source_url": "https://caqm.nic.in/FileUploadDomain/WebsiteDocument/Home/News/GRAP%20Order%20dated%20160120267385c1a4-d360-44ad-9eae-54fa5c0e8f65.pdf",
+      "retrieved_at": "2026-10-08T09:37:46.102610+00:00",
+      "sha256": "358134752e712d7aa807bda8d5e4987d8c39ae747dc3c08db93c59d4ff8d0839",
+      "byte_size": 8523939,
+      "local_path": "sources/caqm-grap-stage3-order-2026-01-16.pdf",
+      "pages_dir": "sources/pages/caqm-grap-stage3-order-2026-01-16"
+    },
+    {
+      "doc_id": "caqm-grap-stage3-revocation-2026-01-22",
+      "title": "Order dated 22.01.2026 - Revocation of actions under Stage III of GRAP",
+      "publisher": "Commission for Air Quality Management in NCR and Adjoining Areas",
+      "source_url": "https://caqm.nic.in/FileUploadDomain/WebsiteDocument/Home/News/GRAP%20Order%20dated%20220120265838a44f-e5d0-4f6a-8f73-390ef0d3966d.pdf",
+      "retrieved_at": "2026-10-08T09:37:47.855545+00:00",
+      "sha256": "e9317ed508bfb511f6694e330bacde8ceff6dcfe5d6703f9b96e53c6aef98996",
+      "byte_size": 8355756,
+      "local_path": "sources/caqm-grap-stage3-revocation-2026-01-22.pdf",
+      "pages_dir": "sources/pages/caqm-grap-stage3-revocation-2026-01-22"
+    }
+  ]
 }

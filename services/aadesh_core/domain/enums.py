@@ -23,6 +23,23 @@ class Provenance(StrEnum):
     """A previously recorded real reading, replayed. Real, but not current."""
 
 
+class InvocationLifecycle(StrEnum):
+    """Whether an invoked GRAP stage is currently in force or has been revoked.
+
+    A stage is invoked by a CAQM order and, crucially, can be revoked by a later one. Without
+    this distinction the corpus cannot tell the CURRENT official state apart from a HISTORICAL
+    invocation, and January's Stage III would silently keep enforcing in October. The loader
+    therefore treats only ACTIVE as "currently invoked"; a REVOKED invocation is retained as
+    replay evidence and never fed to the resolver as if it were live.
+    """
+
+    ACTIVE = "active"
+    """In force. A CAQM order invoked this stage and nothing has revoked it."""
+
+    REVOKED = "revoked"
+    """Superseded by a later order. Kept as historical/replay evidence, never current."""
+
+
 class SourceState(StrEnum):
     """Whether a corpus entry's quote has been proved against hashed source bytes."""
 

@@ -69,9 +69,17 @@ def test_empty_corpus_failure_is_explicit_and_actionable(empty_corpus, capsys):
     assert "CORPUS_NOT_READY" in out
 
 
-def test_the_shipped_repo_corpus_is_in_the_not_ready_state(repo_root, capsys):
-    """Asserts the committed corpus really is empty, so nobody fabricated data to go green."""
-    assert _run(repo_root / "corpus") == VerifyExit.CORPUS_NOT_READY
+def test_the_shipped_repo_corpus_is_fully_verified(repo_root, capsys):
+    """The committed corpus is real: every citation re-proves against the official bytes.
+
+    This replaces an earlier assertion that the shipped corpus was EMPTY. That was the
+    honest Day 1 state, but it stops being honest once authoritative sources are encoded --
+    and a test that still demanded emptiness would be forcing the gate to fail rather than
+    guarding it. The claim it makes now is stronger: the corpus is populated AND every
+    citation in it re-proves.
+    """
+    assert _run(repo_root / "corpus") == VerifyExit.OK
+    assert "VERIFIED" in capsys.readouterr().out
 
 
 # --- the passing state -----------------------------------------------------

@@ -1,3 +1,17 @@
 {
-  "invoked": null
+  "invoked": {
+    "stage": 3,
+    "source_doc": "caqm-grap-stage3-order-2026-01-16",
+    "page": 1,
+    "quote": "the Sub Committee on GRAP hereby decide to invoke all actions under Stage-III ('Severe' Air Quality of Delhi, ranging 4O1-45Of of extant schedule of GRAP, with immediate effect in right earnest by all the agencies concerned in Delhi-NCR,",
+    "invoked_at": "2026-01-16T00:00:00+05:30",
+    "lifecycle": "revoked",
+    "revocation": {
+      "source_doc": "caqm-grap-stage3-revocation-2026-01-22",
+      "page": 1,
+      "quote": "The Sub-Committee, accordingly, decides to revoke its orders dated 16.01.2026, for invoking actions under Stage-III ('Severe' Air Quality) of Schedule of GRAP (modified on 21.11.2025), with immediate effect.",
+      "revoked_at": "2026-01-22T00:00:00+05:30"
+    },
+    "note": "Historical replay only. CAQM invoked Stage III ('Severe', AQI 401-450) on 16.01.2026 and revoked it on 22.01.2026. Stage III is NOT currently in force; this record exists so the invocation can be replayed and re-proved, never as the live stage."
+  }
 }

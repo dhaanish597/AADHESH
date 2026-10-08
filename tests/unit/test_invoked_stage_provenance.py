@@ -27,8 +27,12 @@ from tests.support.corpus_builder import CorpusBuilder
 PAGE_TEXT = (
     "4. All dust generating construction and demolition activities shall remain "
     "suspended in the NCR until further orders.\n"
+    "5. The Sub-Committee on GRAP hereby invokes Stage III of the GRAP in the entire NCR.\n"
 )
 VERBATIM = "dust generating construction and demolition activities shall remain suspended"
+#: The invocation quote must NAME the stage it invokes, so it is a different sentence from
+#: an obligation's quote. Verification refuses a stage number whose sentence does not state it.
+STAGE_QUOTE = "The Sub-Committee on GRAP hereby invokes Stage III of the GRAP"
 INVOKED_AT = "2026-10-08T06:00:00+05:30"
 
 
@@ -51,7 +55,7 @@ def invocation(**overrides) -> dict:
         "stage": 3,
         "source_doc": "order-a",
         "page": 4,
-        "quote": VERBATIM,
+        "quote": STAGE_QUOTE,
         "invoked_at": INVOKED_AT,
     }
     payload.update(overrides)
@@ -151,7 +155,7 @@ def test_the_old_order_doc_id_key_is_refused_with_a_pointer_to_the_new_one(tmp_p
     payload = json.loads(path.read_text(encoding="utf-8"))
     payload["invoked"]["order_doc_id"] = "order-a"
     payload["invoked"]["page"] = 4
-    payload["invoked"]["quote"] = VERBATIM
+    payload["invoked"]["quote"] = STAGE_QUOTE
     path.write_text(json.dumps(payload), encoding="utf-8")
 
     with pytest.raises(CorpusIntegrityError, match="source_doc"):

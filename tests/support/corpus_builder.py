@@ -31,7 +31,9 @@ class CorpusBuilder:
                 "doc_id": doc_id,
                 "title": "Test order",
                 "publisher": "Test Authority",
-                "source_url": "https://example.invalid/test-order.pdf",
+                # An OFFICIAL domain, because verification refuses a document hosted on a
+                # mirror. Tests that mean to prove the mirror is refused set one deliberately.
+                "source_url": "https://caqm.nic.in/test/test-order.pdf",
                 "retrieved_at": "2026-10-08T09:00:00+00:00",
                 "sha256": sha256 or hashlib.sha256(body).hexdigest(),
                 "byte_size": len(body),
