@@ -1,0 +1,41 @@
+# --- Python ---
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+*.egg-info/
+dist/
+build/
+
+# --- Node / Next.js ---
+node_modules/
+.next/
+out/
+*.tsbuildinfo
+
+# --- Env ---
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# --- AWS / SAM ---
+.aws-sam/
+samconfig.local.toml
+
+# --- Corpus source bytes -------------------------------------------------
+# The ORIGINAL downloaded CAQM PDFs are evidence. They are intentionally
+# committed so `make verify` is reproducible on a judge's clean machine.
+# Only scratch artefacts are ignored.
+corpus/sources/.tamper-scratch/
+corpus/sources/**/*.partial
+
+# --- Local scratch ---
+.DS_Store
+Thumbs.db
+*.log
+.verify-report.json

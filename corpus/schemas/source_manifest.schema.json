@@ -1,0 +1,67 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://aadesh.local/schemas/source_manifest.schema.json",
+  "title": "Source document manifest",
+  "description": "The provenance record for every authoritative document Aadesh cites. `make verify` re-hashes the bytes on disk and compares them to this manifest, then re-checks every quote against the extracted page text.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["documents"],
+  "properties": {
+    "documents": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "doc_id",
+          "title",
+          "publisher",
+          "source_url",
+          "retrieved_at",
+          "sha256",
+          "byte_size",
+          "local_path",
+          "pages_dir"
+        ],
+        "properties": {
+          "doc_id": {
+            "type": "string",
+            "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$"
+          },
+          "title": { "type": "string", "minLength": 1 },
+          "publisher": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The issuing authority, e.g. 'Commission for Air Quality Management'."
+          },
+          "source_url": {
+            "type": "string",
+            "format": "uri",
+            "description": "The OFFICIAL domain the bytes were downloaded from. A news article or mirror is not an acceptable source."
+          },
+          "retrieved_at": { "type": "string", "format": "date-time" },
+          "sha256": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$",
+            "description": "Hash of the exact downloaded bytes. Re-checked by `make verify`."
+          },
+          "byte_size": { "type": "integer", "minimum": 1 },
+          "page_count": { "type": "integer", "minimum": 1 },
+          "local_path": {
+            "type": "string",
+            "description": "Path to the committed original bytes, relative to the corpus root."
+          },
+          "pages_dir": {
+            "type": "string",
+            "description": "Directory of extracted per-page text files named p<N>.txt, relative to the corpus root."
+          },
+          "supersedes": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "doc_ids this order amends or replaces. GRAP has been revised repeatedly. If you cannot establish which order is CURRENT for a measure, drop that measure."
+          }
+        }
+      }
+    }
+  }
+}

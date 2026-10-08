@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://aadesh.local/schemas/stage_band.schema.json",
+  "title": "GRAP stage band (rules-as-data)",
+  "description": "Maps an AQI range to a GRAP stage ordinal. THESE ARE LEGAL THRESHOLDS AND LIVE ONLY HERE. They must never appear as literals in application code: a guard test fails the build if an AQI-range integer appears in aadesh_core/domain or aadesh_core/resolver. Until this file is populated from a hashed CAQM order, the IMPLIED stage is UNKNOWN - which is the honest answer, and the one that distinguishes Aadesh from a tool that hardcodes `if aqi > 400`.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["stage", "pollutant", "aqi_lower", "source_doc", "page", "quote"],
+  "properties": {
+    "stage": { "type": "integer", "minimum": 1 },
+    "pollutant": {
+      "type": "string",
+      "description": "Index or pollutant the band is expressed in, e.g. 'AQI'. Copied from the source, not assumed."
+    },
+    "aqi_lower": {
+      "type": "number",
+      "description": "Inclusive lower bound, as stated in the cited source."
+    },
+    "aqi_upper": {
+      "type": ["number", "null"],
+      "description": "Inclusive upper bound, or null for an open-ended top band."
+    },
+    "source_doc": { "type": "string", "minLength": 1 },
+    "page": { "type": "integer", "minimum": 1 },
+    "quote": {
+      "type": "string",
+      "minLength": 1,
+      "description": "VERBATIM text stating this band."
+    }
+  }
+}

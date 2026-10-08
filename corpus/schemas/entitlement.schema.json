@@ -1,0 +1,64 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://aadesh.local/schemas/entitlement.schema.json",
+  "title": "Worker entitlement clause (rules-as-data)",
+  "description": "A cited clause describing what a displaced worker may be entitled to. Aadesh NEVER asserts that a payment will be made, and never invents an amount.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["entitlement_id", "label", "source_doc", "page", "quote", "readiness_requirements"],
+  "properties": {
+    "entitlement_id": {
+      "type": "string",
+      "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$"
+    },
+    "label": { "type": "string", "minLength": 1 },
+    "source_doc": { "type": "string", "minLength": 1 },
+    "page": { "type": "integer", "minimum": 1 },
+    "quote": {
+      "type": "string",
+      "minLength": 1,
+      "description": "VERBATIM text from the cited page."
+    },
+    "amount": {
+      "description": "OPTIONAL and CITATION-BACKED. Null unless a specific figure is stated in a hashed source document. When null, Aadesh reports displaced worker-days instead of rupees, which is always provable. Never populate this from a news article or from memory.",
+      "oneOf": [
+        { "type": "null" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["value_inr", "basis", "source_doc", "page", "quote"],
+          "properties": {
+            "value_inr": { "type": "number", "exclusiveMinimum": 0 },
+            "basis": {
+              "type": "string",
+              "enum": ["per_worker_per_day", "per_worker_one_time"],
+              "description": "What the figure is denominated in. Required so the UI never multiplies a one-time figure by days."
+            },
+            "source_doc": { "type": "string", "minLength": 1 },
+            "page": { "type": "integer", "minimum": 1 },
+            "quote": {
+              "type": "string",
+              "minLength": 1,
+              "description": "The VERBATIM sentence stating this figure. The amount carries its own citation, independent of the clause's."
+            }
+          }
+        }
+      ]
+    },
+    "readiness_requirements": {
+      "type": "array",
+      "description": "What a worker still needs in order to claim. May be empty while unsourced. Each item carries its own citation.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["label", "source_doc", "page", "quote"],
+        "properties": {
+          "label": { "type": "string", "minLength": 1 },
+          "source_doc": { "type": "string", "minLength": 1 },
+          "page": { "type": "integer", "minimum": 1 },
+          "quote": { "type": "string", "minLength": 1 }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,88 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://aadesh.local/schemas/obligation.schema.json",
+  "title": "GRAP obligation (rules-as-data)",
+  "description": "One obligation that a GRAP stage places on one entity type. Every field here is either structural or copied VERBATIM from a hashed source document. Nothing is paraphrased, summarised, or recalled from memory.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "obligation_id",
+    "entity_types",
+    "triggers_at_stage",
+    "label",
+    "field",
+    "operator",
+    "value",
+    "source_doc",
+    "page",
+    "quote",
+    "consequence"
+  ],
+  "properties": {
+    "obligation_id": {
+      "type": "string",
+      "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$",
+      "description": "Stable kebab-case id, e.g. grap3-cnd-dust-01."
+    },
+    "entity_types": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": { "const": "construction_site" },
+      "description": "Scope is deliberately ONE entity type. Adding another is out of scope."
+    },
+    "triggers_at_stage": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "The GRAP stage ordinal at which this obligation begins to apply. No maximum is encoded here: which stages exist is declared by the corpus, not by this schema or by application code."
+    },
+    "label": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Short human label. May be editorial, because it is never the legal basis for anything. The quote is."
+    },
+    "field": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Name of the site-profile fact this obligation keys on, e.g. has_dust_generating_activity. If the fact is absent from the profile, the resolver MUST return UNKNOWN."
+    },
+    "operator": {
+      "type": "string",
+      "enum": ["eq", "neq", "gt", "gte", "lt", "lte", "in", "not_in"]
+    },
+    "value": {
+      "description": "Value compared against the site fact. Type must suit the operator.",
+      "type": ["string", "number", "boolean", "array"]
+    },
+    "source_doc": {
+      "type": "string",
+      "minLength": 1,
+      "description": "doc_id of an entry in corpus/sources/manifest.json. Must exist or verification fails."
+    },
+    "page": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "1-indexed page of the source document on which `quote` appears."
+    },
+    "quote": {
+      "type": "string",
+      "minLength": 1,
+      "description": "VERBATIM text from the cited page. `make verify` re-checks this string appears in the extracted page text. A paraphrase breaks verification, which is the point."
+    },
+    "consequence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["issues_parchi"],
+      "properties": {
+        "issues_parchi": {
+          "type": "boolean",
+          "description": "Whether triggering this obligation opens a parchi for each rostered worker."
+        },
+        "worker_entitlement_ref": {
+          "type": "string",
+          "description": "entitlement_id this obligation routes a displaced worker to. Optional: an obligation may halt work without a separately cited entitlement."
+        }
+      }
+    }
+  }
+}

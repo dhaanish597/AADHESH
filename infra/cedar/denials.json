@@ -1,0 +1,9 @@
+{
+  "_comment": "Maps a Cedar policy @id annotation to the sentence a user is shown. A denial should read as a reason, not as a 403. Keys MUST match @id annotations in policies.cedar; a test asserts every forbid policy has an entry here.",
+
+  "no-proxy-acknowledgement": "Cedar denied this: a supervisor cannot acknowledge a halt on a worker's behalf. Each worker scans and confirms their own parchi.",
+
+  "assist-is-not-disclosure": "Cedar denied this: a facilitator can assist with a claim the worker shared, but cannot read the worker's record. Opting in to help is not opting in to disclosure.",
+
+  "_default": "Cedar denied this: no policy permits that action on this resource for your role."
+}

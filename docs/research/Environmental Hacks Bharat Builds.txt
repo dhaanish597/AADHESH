@@ -1,0 +1,580 @@
+Environmental Hacks | Bharat Builds Tour | WeMakeDevs
+
+WeMakeDevs Logo
+×
+AWS
+Prizes
+Tracks
+Resources
+Judging
+FAQ
+Community
+Environmental Hacks, event 02 of the Bharat Builds Tour, Oct 8 to 11: ₹20 lakh prize pool, fast-track interviews at Amazon, online plus a build day in Delhi
+Event 02
+·
+Bharat Builds Tour
+
+Starts in 2 days, 8 hours
+
+Environmental Hacks
+Bad air, heatwaves, floods, water shortage and waste are problems we see every day. In this hackathon, you pick one of these problems and build something that helps solve it. It can be a problem in your city, your college or your home.
+
+The hackathon runs online Thursday to Sunday, with an optional build day at DTU, Delhi, on Saturday, Oct 10. Limited seats, and you get workshops, project feedback, time with the Amazon team, and swag.
+
+Hybrid week
+/
+Oct 8 – 11, 2026
+
+Teams of 1 to 4
+
+Online
+Thu – Sun
+Oct 8 – 11
+Anywhere in India
+In person
+8 AM – 8 PM
+Oct 10
+Delhi Technological University
+Delhi
+5,956 registered
+
+Team codeB3RJZS
+
+Garden
+1 of 4 seats filled.
+
+Dhaanish Ahamed (you)
+
+@dhaanish
+
+Leader
+Invite by email
+them@example.com
+Submissions open 11 Oct 2026, 8:00 am. You cannot change your team after you submit your project.
+
+Optional
+
+Join us in Delhi
+One day of workshops, networking, meeting the Amazon team, and swag. Oct 10, limited seats.
+
+
+Overview
+Schedule
+Mentors
+Community partners
+Rules
+01 / Prizes
+
+Multiple tracks to win
+Pick the problem you care about the most, and build something that helps fix it. The top 10 students from all three tracks get a fast-track interview at Amazon.
+
+Fast-track interview at Amazon.
+
+Top 10 students, across all three tracks
+
+6 months
+Internship, plus full-time roles
+Top 10 students from top projects will skip screening rounds and get fast track interviews at Amazon.
+
+Read the rules
+
+Track 01
+
+Air
+Pollution, exposure, and the days the AQI goes off the chart.
+
+Track winner
+
+₹2,00,000
+
+In cash
+
++ $2,000
+
+In AWS credits, on top
+
+
+Track 02
+
+Heat and Water
+Heatwaves, floods, droughts, and every leak in between.
+
+Track winner
+
+₹2,00,000
+
+In cash
+
++ $2,000
+
+In AWS credits, on top
+
+
+Track 03
+
+Waste and Energy
+What we throw away, and how we power what we keep.
+
+Track winner
+
+₹2,00,000
+
+In cash
+
++ $2,000
+
+In AWS credits, on top
+
+$1,000
+
+Per team
+
+Top 4 runners-up
+
+AWS credits
+In AWS credits, to each team
+
+Four more teams take credits home, from across all three tracks. There is nothing extra to enter for: every submission is already in the running.
+
+AirPods in their charging case, awarded for the top blog posts
+Top 5 blogs
+
+AirPods 5
+To 5 people
+
+Write up what you built: the problem, the stack, what fought back. Publish it on AWS Builder Center and link it in your submission.
+
+A Bharat Builds Tour tote bag, water bottle and mug, awarded to the top teams
+Tour swag
+
+The tour kit
+To the top teams
+
+Finish near the top of the board and the kit is yours, whether you built online or spent the Saturday with us in Delhi.
+
+02 / Tracks
+
+Pick a problem worth fixing
+The problems under each track are a place to start, not a list to pick from. If it makes the air cleaner, the water safer or the city lighter, it fits.
+
+
+01
+Air
+Help people breathe easier. Track what's in the air, warn the people most exposed to it, and change what happens on the bad days.
+
+AQI
+Pollution exposure
+Stubble burning
+Indoor air
+School safety on bad days
+
+02
+Heat and Water
+Too much water, too little of it, and the heat in between. Build for the monsoon that floods the street and the summer that dries the tap.
+
+Heatwaves
+Floods
+Monsoon waterlogging
+Droughts
+Water tankers
+Leaks
+Groundwater
+
+03
+Waste and Energy
+Close the loop on what a city throws away and cut what it burns. Sort it, recycle it, power it cleaner, and nudge people out of their cars.
+
+Segregation
+Recycling
+E-waste
+Informal recyclers
+Rooftop solar
+EV nudges
+Public transport
+Two ways to build, in any track
+
+You can build with AWS open source tools, AWS cloud services, or both. To be eligible for prizes, your project needs to either use at least one AWS open source tool or be deployed on AWS. Beyond that, you're free to bring in any other tools you like. The list below is just a starting point to help you get going, not a set of rules.
+
+What you need
+
+Build It
+
+Open source, on your machine
+
+No AWS account, no card, no bill.
+
+Ship It
+
+Deployed, with a URL
+
+Free tier: up to $200 in credits to start.
+
+Agents and AI
+Build It
+Strands Agents SDK,
+PartyRock
+Ship It
+SageMaker AI
+Containers and Kubernetes
+Build It
+Finch,
+EKS Distro,
+EKS Anywhere
+Ship It
+EKS,
+ECS,
+Fargate
+Serverless
+Build It
+SAM CLI,
+LocalStack
+Ship It
+Lambda,
+API Gateway,
+Step Functions
+Servers and runtimes
+Build It
+Firecracker,
+Corretto
+Ship It
+EC2,
+Lightsail,
+App Runner,
+Amplify Hosting
+Data and search
+Build It
+OpenSearch
+Ship It
+S3,
+DynamoDB,
+RDS,
+Aurora
+Auth and policy
+Build It
+Cedar
+Ship It
+Cognito
+The plumbing
+Build It
+-
+Ship It
+CloudFront,
+Route 53,
+EventBridge,
+SQS,
+SNS,
+CloudWatch
+Deploying starts free
+Nothing in the Ship It column needs a paid account. Sign up for the AWS Free Tier and you start with up to $200 in free credits, on top of the services that are always free, which is enough to deploy a project this weekend. Using it is completely valid.
+
+See what the free tier covers
+03 / Resources
+
+Everything you need to build
+Verify you're a student, build on the AWS Free Tier, and read up on the tour as it goes. A new AWS account starts with up to $200 in free credits.
+
+01
+
+Verify you're a student on AWS Builder Center
+One free profile, no credit card, two minutes. Every entry on the tour is checked against it, and verifying your enrollment unlocks $579 of rewards.
+
+Required to compete, and it unlocks rewards on your profile.
+
+Hands-on workshops
+Hundreds of step-by-step labs, built by AWS.
+
+Free sandboxes
+Eight-hour AWS environments, no account needed.
+
+Your builder profile
+Public, and yours to keep after the weekend.
+
+02
+
+Build on AWS, starting with the free tier
+Start with the AWS Free Tier. A new AWS account comes with up to $200 in free credits on top of the services that are always free, which covers the weekend and counts in full for every track.
+
+AWS Free Tier
+A new account starts with up to $200 in credits.
+
+The free tier, explained
+Builder Center's guide to what it covers, and for how long.
+
+Getting started with the free tier
+What to know before you open an account.
+
+Set up your dev environment
+Get your machine ready to build on AWS.
+
+Toolbox
+AWS SDKs, open-source projects and language resources.
+
+03
+
+Blogs from the AWS tour
+Guides, recaps and build notes written around the tour, in one place.
+
+From the tour
+
+Read the blogs
+Up to
+
+$200
+
+In free AWS credits
+
+Every new AWS account starts with them, on top of the services that are always free. That is enough to build and deploy a project this weekend, and it counts in full for every track.
+
+$100 lands when the account is created and the rest is earned through AWS's own onboarding activities. Debit cards and RuPay are accepted, and the verification charge is about ₹2.
+
+04 / Judging
+
+What judges look for
+We are looking for projects that make a real difference to the air people breathe, the water they depend on, and the waste and energy their cities run on.
+
+01
+Idea and Impact
+Pick a track and find the problem inside it. Does it fix a real environmental problem? And what changes for the people living with it? A small problem solved well beats a big one solved vaguely.
+
+02
+Built on AWS
+Build locally with AWS open-source tools, or deploy on AWS services. Start on the AWS Free Tier, which gives a new account up to $200 in credits. Using an AWS open-source project or AWS services is mandatory to win a prize.
+
+03
+Design and usability
+The people living with the problem have to be able to use the fix: clear to pick up, easy to get around, and built for where they are. Would someone who isn't on your team know what to do with it?
+
+04
+The execution
+Does it work? Not perfect, not polished. Working. One feature that runs beats five that almost do.
+
+05
+The demo video
+Three minutes, recorded, to show what it does, who it is for, and where AWS fits. There is no live demo, so the video is what the judges see.
+
+We judge what you built, not what you spent. Projects built locally and projects deployed on AWS are scored with the same care, and each track is judged on its own.
+
+05 / FAQ
+
+Got questions?
+What is the theme?
+Do I have to pick a track?
+What happened to Build It and Ship It?
+Do I need to know AWS?
+How do I build on AWS without paying?
+Do I need a credit card?
+How do the fast-track interviews at Amazon work?
+Can I participate online?
+Where is the build day?
+How do I attend in person?
+Does joining in person help my chances?
+Where can I read up before the weekend?
+Who can participate?
+How big can a team be?
+Is it free?
+I took part in First Commit. Can I enter this one too?
+Will I get a certificate?
+Can I start building before the event?
+06 / Community
+
+Where to ask, and where to find a team
+Nobody builds this weekend alone. Bring a question, or turn up without a team and leave with one.
+
+WeMakeDevs Discord
+The fastest way to reach us. Ask anything about the hackathon, find teammates in the team-forming channels, and get help while you build.
+
+WeMakeDevs space on AWS Builder Center
+Where the tour's updates and announcements are written down and stay findable. Introduce yourself, say what you're building, and see who else is building near you.
+
+07 / In person
+
+Spend the Saturday with us at DTU, Delhi
+The hackathon runs online for all four days. Oct 10 is an optional build day in the room, with limited seats.
+
+Saturday, Oct 10
+
+Delhi Technological University
+Shahbad Daulatpur, Main Bawana Road, Delhi 110042
+
+Hosted with
+
+Delhi Technological University logo
+AIMS-DTU logo
+Who you will meet
+
+
+Piyush Garg
+Founder, Teachyst
+
+
+Kunal Kushwaha
+Founder, WeMakeDevs
+
+
+Saiyam Pathak
+Founder, Kubesimplify
+
+Workshops in the room
+Hands-on AWS sessions, run in front of you.
+
+Feedback on your project
+Show what you have and get it pulled apart in time to fix it.
+
+Meet the Amazon team
+The people behind the services you are building on.
+
+Swag to take home
+Tour swag on the day, whether or not you place.
+
+8 AM to 8 PM
+Limited seats
+Two signups: check in for the hackathon on this page, then apply on Luma for the Saturday at DTU. The day is optional, and being there adds nothing to your score. Everything judged happens online.
+
+
+Event 02 of 06
+
+Build what the planet needs.
+Four days, three tracks, and a problem worth fixing. Your tour signup covers every event, so check in here and start building.
+
+DTU in Delhi hosts the build day. Online is open to all of India.
+
+WeMakeDevs Logo
+Helping great developer tools reach the builders who will shape the future.
+
+Keep in touch
+
+Developers
+Hackathons
+Meetups
+Scholarships
+Event Calendar
+Feedback
+Businesses
+Partners
+Contact Us
+Company
+Blog
+Code of Conduct
+Privacy Policy
+Terms of Service
+© 2026 WeMakeDevs. All rights reserved.
+llms.txt
+
+Rules
+
+The rules of the tour
+One rulebook covers all six hackathons, Environmental Hacks included. Everything specific to this weekend is on its own pages: the tracks and the prizes on the overview, and the hours and the submission deadline on the schedule.
+
+Last updated September 16, 2026
+Rules for the whole tour
+
+01
+
+Who can enter
+You can enter if you are a university student in India and you are 18 or older.
+Every hackathon runs online, so you can take part from anywhere in India. The host city also runs that hackathon in person. In-person seats are limited and go first come, first served.
+You register once and that covers all six hackathons. Register for the tour, then check in to each hackathon when it opens. Entering one hackathon does not stop you entering another.
+You need two things: a WeMakeDevs account and an AWS Builder Center profile with your university enrollment verified on it.
+If your student verification is still being sorted out, enter anyway. It is run by SheerID, and an open case with them does not stop you submitting to a hackathon that is running, or being judged and considered for its prizes while you resolve it. Get it cleared all the same: the rewards on your Builder Center profile and the fast-track interview in section 06 both wait on it.
+If you help run the tour, judge it, or work for WeMakeDevs or AWS, you can still take part. You cannot win prizes.
+02
+
+Teams
+Build alone, or in a team of up to four people. The limit is the same online and in person.
+Teammates can be from different universities and different cities. Each member has to qualify on their own.
+Every member registers for the tour with their own account. A captain cannot register the rest of the team.
+One submission per team. One team per person per hackathon.
+Part of your team can be at the venue and part online. Judging works exactly the same either way.
+03
+
+What you build
+It all comes down to the clock.
+
+Start building when the hackathon opens. Stop at the deadline on that hackathon's page. Learning, planning and practice before it starts are fine, and we encourage them.
+Old projects do not count. Build something new once the clock starts. If you began the project before the hackathon opened, it does not qualify, even if you rewrote it.
+You can use open-source libraries, frameworks, public APIs, boilerplate and starter templates. What gets judged is what you added during the event.
+Your project has to use AWS, and your demo video has to show it. Naming AWS in the writeup alone is not enough.
+Start on the AWS Free Tier. A new AWS account comes with up to $200 in free credits, on top of the services that are always free, and building or deploying on them counts in full for every track, the deployed one included. If you need more than that, you can request credits from the organisers.
+You can use AI coding tools. List the ones you used in your writeup.
+The work has to be yours. Anything you did not write needs a credit and a licence that allows you to use it.
+You keep the rights to what you build. By entering, you let WeMakeDevs and AWS show your project and name your team when they write about the tour.
+What the AWS Free Tier covers
+04
+
+Submissions
+A submission is three things: a public repository, a demo video of up to three minutes, and a short writeup covering the problem, the build, and where AWS fits.
+The demo video has to be uploaded to YouTube and run under three minutes. Set it to public or unlisted, and check the link opens in a signed-out browser before you submit it.
+Submit on your hackathon's own submission form, once per team, before the deadline shown there.
+Deadlines are strict. Once the deadline on your hackathon's page passes, the form closes and no project can be entered after it.
+Judges score what you submit and nothing else. There is no live demo and no call. If the video does not show it, it does not count, and a feature that exists only in the writeup does not count either.
+05
+
+Judging
+Projects built at the venue and projects built online go to the same panel and are scored on the same criteria. Each hackathon lists its criteria on its own page.
+The panel's decision is final. Scores are not published and are not discussed afterwards.
+Copying someone else's work, passing an old project off as new, or a repository whose history does not match the event dates disqualifies the whole team.
+Winners are announced on the hackathon's page and told by email. Prizes go to the details you registered with, so keep them correct.
+06
+
+Fast-track interview at Amazon
+The one thing here that lasts longer than the weekend.
+
+The rule
+
+Top student projects from Pre-Final Year (2028) & Final Year (2027) will be eligible for a fast-track interview opportunity with Amazon's University Talent Acquisition Team for available roles at Amazon.
+
+At most ten fast-track interviews can be put forward per hackathon. Ten is a ceiling, not a promise. If no project meets the bar, fewer go forward, or none at all.
+The interview is for a six month internship at Amazon, or for a full-time role.
+Your eligibility is checked against your registration details and your AWS Builder Center profile. Both have to be correct, and your student status verified, before the hackathon you enter.
+Winning a prize does not get you an interview, and winning nothing does not rule you out of one. Prizes and interviews are two separate decisions, made by different people against different criteria.
+The judges, the organisers and Amazon decide which projects go forward. Their decision is final, no reasons are given, and you cannot appeal it.
+All of this can change. The opportunity may be changed, paused or withdrawn at any time, and nothing on this site promises that any interview will be offered at any hackathon.
+The full terms are in section 08 below. Read them before you count on this.
+07
+
+Conduct
+The WeMakeDevs Code of Conduct applies at every hackathon, online and in person, for the whole event and in every channel the tour runs in.
+Harassment, cheating, or abuse of mentors, volunteers or other builders ends your participation. There is no appeal.
+At the venue, follow the venue's own rules and whatever the on-site staff tell you, for the whole event.
+Report anything to the organisers on the day, or by email. Every report is handled in confidence.
+Read the Code of Conduct
+08 / Terms and conditions
+
+The fast-track interview, in full
+These are the terms for the fast-track interview in section 06. All of them except the last two come from Amazon, word for word. The last two are ours: what winning a prize does and does not do for you, and how many interviews one hackathon can put forward.
+
+01
+No guarantee of employment
+An interview opportunity does not constitute an offer of employment or internship. All candidates must successfully clear Amazon's standard interview and evaluation process.
+02
+Subject to business requirements
+Interview opportunities are subject to availability of open roles, team headcount, and business requirements at the time of scheduling.
+03
+Eligibility criteria
+Eligibility is limited to students currently enrolled in the specified degree programs with the expected graduation year. Students must meet Amazon's minimum eligibility criteria and not be under any active disciplinary action. Detailed eligibility criteria will be shared with students whose projects are shortlisted as top projects.
+04
+Selection of top projects
+Selection of top projects is at the sole discretion of the evaluation panel. The decision of the panel is final and binding. No correspondence regarding the evaluation will be entertained.
+05
+Timeline and validity
+Interview opportunities must be availed within the stipulated timeframe communicated at the time of notification. Unclaimed opportunities will lapse automatically.
+06
+No sponsorship or relocation commitment
+This opportunity does not imply any commitment regarding visa sponsorship, relocation support, or compensation terms, which will be determined independently if an offer is extended.
+07
+Right to modify or withdraw
+Amazon reserves the right to modify, suspend, or withdraw this opportunity at any time without prior notice, due to changes in hiring plans or business conditions.
+08
+Data usage consent
+By participating, students consent to their project submissions and personal information being shared with Amazon's recruitment team for evaluation purposes.
+09
+Non-transferable
+The interview opportunity is non-transferable and applies only to the individual(s) named in the selected project team.
+10
+Winning is not the qualifier
+Winning a track, or any other prize at a hackathon on the tour, does not qualify a project for a fast-track interview, and a project that wins no prize is not excluded from one. Prizes and interview opportunities are decided separately, against different criteria.
+11
+Number of opportunities
+A maximum of ten fast-track interview opportunities may be put forward per hackathon. This is an upper limit and not a commitment that ten will be offered: the number depends on the projects submitted and on Amazon's hiring requirements at the time, and may be fewer, or none.
+Something unclear?
+Ask us before the clock starts, not after. We would much rather answer a question than disqualify a project.

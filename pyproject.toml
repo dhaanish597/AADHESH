@@ -1,0 +1,49 @@
+[project]
+name = "aadesh"
+version = "0.1.0"
+description = "Environmental compliance execution system for Delhi-NCR construction sites under GRAP"
+requires-python = ">=3.13"
+license = { text = "Apache-2.0" }
+
+dependencies = [
+    # Real Cedar 4.x engine (Rust) via native Python bindings.
+    # Pinned: the authorization boundary must not drift under us mid-hackathon.
+    "cedarpy==4.12.1",
+    # Corpus schema validation. A corpus entry that does not validate cannot be loaded.
+    "jsonschema>=4.23",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.3",
+    "pytest-cov>=6.0",
+    "ruff>=0.8",
+]
+# Opt-in only. The default test path must never require Docker or AWS.
+aws = [
+    "boto3>=1.35",
+]
+
+[project.scripts]
+aadesh-verify = "aadesh_cli.verify:main"
+
+[tool.pytest.ini_options]
+# services/ is on the path so `aadesh_core` imports without an install step.
+pythonpath = ["services"]
+testpaths = ["tests"]
+addopts = "-ra --strict-markers --strict-config"
+markers = [
+    "integration: requires LocalStack or Docker (excluded from the default run)",
+    "requires_index: requires a running OpenSearch (excluded from the default run)",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py313"
+src = ["services", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "SIM", "RUF"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["E501"]

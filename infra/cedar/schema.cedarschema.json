@@ -1,0 +1,65 @@
+{
+  "Aadesh": {
+    "entityTypes": {
+      "Principal": {
+        "shape": {
+          "type": "Record",
+          "attributes": {
+            "role": { "type": "String", "required": true },
+            "assignedSite": { "type": "String", "required": false }
+          }
+        }
+      },
+      "Site": {
+        "shape": {
+          "type": "Record",
+          "attributes": {
+            "siteId": { "type": "String", "required": true }
+          }
+        }
+      },
+      "Parchi": {
+        "shape": {
+          "type": "Record",
+          "attributes": {
+            "worker": { "type": "Entity", "name": "Principal", "required": true },
+            "siteId": { "type": "String", "required": true },
+            "sharedForAssistance": { "type": "Boolean", "required": true }
+          }
+        }
+      }
+    },
+    "actions": {
+      "IssueHalt": {
+        "appliesTo": {
+          "principalTypes": ["Principal"],
+          "resourceTypes": ["Site"]
+        }
+      },
+      "CreateStandingOrder": {
+        "appliesTo": {
+          "principalTypes": ["Principal"],
+          "resourceTypes": ["Site"]
+        }
+      },
+      "AckParchi": {
+        "appliesTo": {
+          "principalTypes": ["Principal"],
+          "resourceTypes": ["Parchi"]
+        }
+      },
+      "ViewParchi": {
+        "appliesTo": {
+          "principalTypes": ["Principal"],
+          "resourceTypes": ["Parchi"]
+        }
+      },
+      "AssistClaim": {
+        "appliesTo": {
+          "principalTypes": ["Principal"],
+          "resourceTypes": ["Parchi"]
+        }
+      }
+    }
+  }
+}

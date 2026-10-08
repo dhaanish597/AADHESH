@@ -1,0 +1,21 @@
+# Default: normalise text in the repo, check out with LF.
+* text=auto eol=lf
+
+# ---------------------------------------------------------------------------
+# EVIDENCE — byte-exact, never transformed.
+#
+# `make verify` SHA-256s the stored CAQM order bytes and matches cited quotes
+# verbatim against the extracted page text. If Git rewrote line endings on
+# checkout, a judge cloning this repo on a different OS would get different
+# bytes than we hashed, and verification would fail for a reason that has
+# nothing to do with the citations. `-text` disables all conversion.
+# ---------------------------------------------------------------------------
+corpus/sources/** -text
+*.pdf binary
+
+# Keep Makefile tabs and shell scripts LF regardless of platform.
+Makefile text eol=lf
+*.sh text eol=lf
+
+# Don't count vendored or research material in language stats.
+docs/research/** linguist-documentation
