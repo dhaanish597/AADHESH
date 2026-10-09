@@ -19,6 +19,7 @@ from aadesh_core.ports.clock import Clock
 from aadesh_core.ports.corpus import InvokedStageSource, RulesCorpus, SourceDocumentStore
 from aadesh_core.ports.explanation import ExplanationModel, ExplanationProvider
 from aadesh_core.ports.parchi_store import ParchiStore
+from aadesh_core.ports.task_token import TaskTokenStore
 from aadesh_core.ports.verification import CitationVerifier
 
 __all__ = [
@@ -36,4 +37,5 @@ __all__ = [
     "ParchiStore",
     "RulesCorpus",
     "SourceDocumentStore",
+    "TaskTokenStore",
 ]
