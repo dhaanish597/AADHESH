@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 from typing import Any
+from uuid import uuid4
 
 from aadesh_core.domain import (
     Citation,
@@ -19,8 +20,24 @@ from aadesh_core.domain import (
     SourceState,
     StationReading,
 )
+from aadesh_core.domain.enums import (
+    StageMatch,
+    StandingOrderAction,
+    StandingOrderStatus,
+    TriggerType,
+)
+from aadesh_core.standing_order.models import (
+    StageInvocationTrigger,
+    StandingOrder,
+    StandingOrderActionClause,
+    frozendict,
+)
 
 FIXED_NOW = datetime(2026, 10, 8, 9, 0, tzinfo=UTC)
+
+NOW = datetime(2026, 10, 8, 9, 0, tzinfo=UTC)
+VALID_FROM = datetime(2026, 10, 8, 10, 0, tzinfo=UTC)
+VALID_UNTIL = datetime(2026, 10, 8, 18, 0, tzinfo=UTC)
 
 
 def citation(**over: Any) -> Citation:
@@ -88,4 +105,52 @@ def reading(**over: Any) -> StationReading:
             "provenance": Provenance.SYNTHETIC,
             **over,
         }
+    )
+
+
+def standing_order(
+    *,
+    status: StandingOrderStatus = StandingOrderStatus.DRAFT,
+    valid_from: datetime = VALID_FROM,
+    valid_until: datetime = VALID_UNTIL,
+    signed_at: datetime | None = None,
+    commitment_hash: str | None = None,
+    triggered_at: datetime | None = None,
+    completed_at: datetime | None = None,
+    expired_at: datetime | None = None,
+    supervisor_id: str = "sup-1",
+    site_id: str = "site-001",
+    trigger: StageInvocationTrigger | None = None,
+    actions: tuple[StandingOrderActionClause, ...] | None = None,
+    fingerprint: str | None = None,
+) -> StandingOrder:
+    if trigger is None:
+        trigger = StageInvocationTrigger(
+            stage=3,
+            match=StageMatch.EXACT,
+            type=TriggerType.OFFICIAL_STAGE_INVOCATION,
+        )
+    if actions is None:
+        actions = (
+            StandingOrderActionClause(
+                action=StandingOrderAction.ISSUE_HALT,
+                parameters=frozendict({}),
+            ),
+        )
+    return StandingOrder(
+        standing_order_id=str(uuid4()),
+        site_id=site_id,
+        supervisor_id=supervisor_id,
+        trigger=trigger,
+        actions=actions,
+        valid_from=valid_from,
+        valid_until=valid_until,
+        status=status,
+        created_at=NOW,
+        signed_at=signed_at,
+        commitment_hash=commitment_hash,
+        trigger_fingerprint=fingerprint,
+        triggered_at=triggered_at,
+        completed_at=completed_at,
+        expired_at=expired_at,
     )
