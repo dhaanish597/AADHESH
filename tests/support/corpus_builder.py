@@ -6,6 +6,41 @@ import hashlib
 import json
 from pathlib import Path
 
+from aadesh_core.citations import page_text_sha256
+
+RULE_CONTEXT = "Test Stage III. Previous stage restrictions continue."
+
+
+def rule_entry(*, obligation_id="test-ob-01", doc_id="test-order", page=4, quote):
+    """Cited test-only rule in the same schema as production rules."""
+    return {
+        "obligation_id": obligation_id,
+        "entity_types": ["construction_site"],
+        "triggers_at_stage": 3,
+        "label": "Test obligation",
+        "applicability": {
+            "field": "in_ncr",
+            "operator": "eq",
+            "value": True,
+            "evidence": ["clause"],
+        },
+        "requirement": {
+            "field": "activity_in_progress",
+            "operator": "eq",
+            "value": False,
+            "evidence": ["clause"],
+        },
+        "required_action": "Suspend the test activity",
+        "source_doc": doc_id,
+        "page": page,
+        "quote": quote,
+        "evidence": {"context": {"source_doc": doc_id, "page": page, "quote": RULE_CONTEXT}},
+        "stage_evidence": "context",
+        "continuation_evidence": "context",
+        "action_evidence": ["clause"],
+        "consequence": {"issues_parchi": True},
+    }
+
 
 class CorpusBuilder:
     """Writes a corpus tree. Defaults produce an EMPTY but structurally valid corpus."""
@@ -57,19 +92,7 @@ class CorpusBuilder:
         quote: str,
     ) -> CorpusBuilder:
         self._obligations.append(
-            {
-                "obligation_id": obligation_id,
-                "entity_types": ["construction_site"],
-                "triggers_at_stage": 3,
-                "label": "Test obligation",
-                "field": "has_dust_generating_activity",
-                "operator": "eq",
-                "value": True,
-                "source_doc": doc_id,
-                "page": page,
-                "quote": quote,
-                "consequence": {"issues_parchi": True},
-            }
+            rule_entry(obligation_id=obligation_id, doc_id=doc_id, page=page, quote=quote)
         )
         return self
 
@@ -109,9 +132,16 @@ class CorpusBuilder:
             manifest_docs.append(doc)
 
         for (doc_id, page), text in self._pages.items():
+            if any(
+                rule["source_doc"] == doc_id and rule["page"] == page for rule in self._obligations
+            ):
+                text += "\n" + RULE_CONTEXT
             page_file = corpus / "sources" / "pages" / doc_id / f"p{page}.txt"
             page_file.parent.mkdir(parents=True, exist_ok=True)
             page_file.write_text(text, encoding="utf-8")
+            for document in manifest_docs:
+                if document["doc_id"] == doc_id:
+                    document.setdefault("page_sha256", {})[str(page)] = page_text_sha256(text)
 
         _write(corpus / "sources" / "manifest.json", {"documents": manifest_docs})
         _write(

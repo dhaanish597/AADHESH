@@ -40,6 +40,25 @@ class _UnknownFact:
 UNKNOWN_FACT: Final[Any] = _UnknownFact()
 
 
+class _MissingFact:
+    """Singleton for an absent key, distinct from an explicitly unknown fact."""
+
+    __slots__ = ()
+
+    def __repr__(self) -> str:
+        return "MISSING_FACT"
+
+    def __bool__(self) -> bool:
+        raise TypeError("MISSING_FACT has no truth value. Handle missing facts explicitly.")
+
+    def __reduce__(self) -> str:
+        return "MISSING_FACT"
+
+
+MISSING_FACT: Final[Any] = _MissingFact()
+"""Returned by SiteProfile.fact() when the key is absent entirely."""
+
+
 def is_known(value: Any) -> bool:
-    """True when `value` is a usable fact rather than the unknown sentinel."""
-    return value is not UNKNOWN_FACT
+    """Whether a value is recorded; comparison validity is checked separately."""
+    return value is not UNKNOWN_FACT and value is not MISSING_FACT and value is not None

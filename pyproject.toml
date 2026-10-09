@@ -40,12 +40,14 @@ aadesh-verify = "aadesh_cli.verify:main"
 aadesh-corpus = "aadesh_cli.corpus:main"
 aadesh-parchi = "aadesh_cli.parchi:main"
 aadesh-resolve = "aadesh_cli.resolve:main"
+aadesh-web = "aadesh_web.server:main"
 
 [tool.hatch.build.targets.wheel]
 packages = [
     "services/aadesh_core",
     "services/aadesh_adapters",
     "services/aadesh_cli",
+    "services/aadesh_web",
 ]
 
 [tool.pytest.ini_options]

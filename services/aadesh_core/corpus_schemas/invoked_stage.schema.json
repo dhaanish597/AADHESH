@@ -62,7 +62,8 @@
   "allOf": [
     {
       "if": { "properties": { "lifecycle": { "const": "revoked" } }, "required": ["lifecycle"] },
-      "then": { "required": ["revocation"] }
+      "then": { "required": ["revocation"] },
+      "else": { "not": { "required": ["revocation"] } }
     }
   ]
 }

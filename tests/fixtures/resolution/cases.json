@@ -1,0 +1,89 @@
+[
+  {
+    "case": "A",
+    "site": "piling-site.json",
+    "official_stage": null,
+    "applicable": [],
+    "stage_status": "NO_OFFICIAL_INVOCATION"
+  },
+  {
+    "case": "B",
+    "site": "piling-site.json",
+    "official_stage": 1,
+    "applicable": [
+      "grap1-cd-dust-mitigation",
+      "grap1-cd-large-project-registration"
+    ],
+    "statuses": {
+      "grap1-cd-dust-mitigation": "MET",
+      "grap1-cd-large-project-registration": "MET"
+    }
+  },
+  {
+    "case": "C",
+    "site": "piling-site.json",
+    "official_stage": 3,
+    "statuses": {
+      "grap3-cd-restricted-activities": "NOT_MET",
+      "grap3-cd-piling": "NOT_MET",
+      "grap3-cd-permitted-categories-only": "NOT_MET",
+      "grap3-cd-demolition": "NOT_APPLICABLE"
+    }
+  },
+  {
+    "case": "D",
+    "site": "linear-project.json",
+    "official_stage": 4,
+    "statuses": {
+      "grap3-cd-piling": "MET",
+      "grap4-cd-linear-projects": "NOT_MET"
+    }
+  },
+  {
+    "case": "E",
+    "site": "piling-site.json",
+    "official_stage": 2,
+    "aqi": 420,
+    "implied_stage": 3,
+    "stage_status": "DISCREPANCY",
+    "statuses": {
+      "grap3-cd-piling": "NOT_APPLICABLE"
+    }
+  },
+  {
+    "case": "F",
+    "site": "piling-site.json",
+    "official_stage": null,
+    "aqi": 420,
+    "implied_stage": 3,
+    "stage_status": "DISCREPANCY",
+    "applicable": []
+  },
+  {
+    "case": "G",
+    "site": "unknown-dust-site.json",
+    "official_stage": 1,
+    "statuses": {
+      "grap1-cd-dust-mitigation": "UNKNOWN"
+    }
+  },
+  {
+    "case": "H",
+    "site": "piling-site.json",
+    "official_stage": 1,
+    "overrides": {
+      "dust_mitigation_compliant": false
+    },
+    "statuses": {
+      "grap1-cd-dust-mitigation": "NOT_MET"
+    }
+  },
+  {
+    "case": "I",
+    "site": "piling-site.json",
+    "official_stage": 1,
+    "statuses": {
+      "grap1-cd-dust-mitigation": "MET"
+    }
+  }
+]

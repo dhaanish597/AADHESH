@@ -1,151 +1,246 @@
-"""The deterministic obligation resolver.
+"""Pure obligation resolution over an immutable, verified corpus snapshot.
 
-This function is the heart of Aadesh and it is deliberately boring: a pure function over
-plain data, with no clock read, no network call, no I/O, and no model anywhere near it. Same
-inputs, same outputs, always. That is what makes the result something you can put in front of
-a worker and defend afterwards.
-
-Order of checks matters and is load-bearing:
-
-  1. **Entity scope** -- an obligation for another entity type is out of scope, full stop.
-  2. **Source state** -- an unverified citation is excluded BEFORE evaluation, so unproven
-     text can never produce a determination.
-  3. **Invoked stage** -- absent means unknown, not "nothing applies".
-  4. **Stage trigger** -- an obligation above the invoked stage genuinely does not apply.
-  5. **Fact evaluation** -- missing or unknown facts yield UNKNOWN.
+No I/O, clock reads, model calls, rule IDs, project categories or legal thresholds here.
+Applicability and compliance are separate expressions supplied by the cited corpus.
 """
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+import re
 from datetime import datetime
 
+from aadesh_core.citations import literal_is_cited, quote_names_stage
 from aadesh_core.domain import (
-    MISSING_FACT,
-    UNKNOWN_FACT,
+    Citation,
+    ConstructionSite,
     ExcludedObligation,
+    InvocationLifecycle,
     InvokedStage,
     Obligation,
     ObligationResult,
-    ObligationSet,
     ObligationStatus,
+    ReplayContext,
+    ResolutionMode,
+    ResolutionResult,
     SiteProfile,
     SourceState,
     StationReading,
+    VerifiedCorpus,
 )
-from aadesh_core.resolver.operators import apply_operator
+from aadesh_core.errors import CorpusIntegrityError
+from aadesh_core.resolver.predicates import evaluate
+from aadesh_core.stages import stage_status
 
 
-def _unsourced_reason(obligation: Obligation) -> str:
+def _proved(citation: Citation | None, corpus: VerifiedCorpus) -> bool:
     return (
-        f"Citation for {obligation.obligation_id} is not verified against hashed source "
-        f"bytes (cites {obligation.citation.source_doc} p.{obligation.citation.page}). "
-        f"Excluded from resolution. Run `make verify` for detail."
+        isinstance(citation, Citation)
+        and bool(citation.source_doc and citation.quote.strip())
+        and type(citation.page) is int
+        and citation.page > 0
+        and citation.source_hash is not None
+        and re.fullmatch(r"[a-f0-9]{64}", citation.source_hash) is not None
+        and citation in corpus.proved_citations
     )
 
 
-def _evaluate(obligation: Obligation, site: SiteProfile) -> tuple[ObligationStatus, str]:
-    """Evaluate one obligation's trigger condition against the site profile."""
-    raw = site.fact(obligation.field)
+def _rule_proved(rule: Obligation, corpus: VerifiedCorpus) -> bool:
+    if rule.source_state is not SourceState.VERIFIED or rule not in corpus.proved_obligations:
+        return False
+    if not all(_proved(citation, corpus) for citation in rule.citations):
+        return False
+    evidence = {"clause": rule.citation, **dict(rule.evidence)}
+    trees = [rule.applicability, rule.requirement]
+    if rule.clarification_when is not None:
+        trees.append(rule.clarification_when)
+        if not rule.clarification:
+            return False
+    refs = [rule.stage_evidence, rule.continuation_evidence, *rule.action_evidence]
+    for tree in trees:
+        for node in tree.walk():
+            if not node.evidence:
+                return False
+            refs.extend(node.evidence)
+    if not rule.required_action.strip() or not rule.action_evidence:
+        return False
+    if any(ref not in evidence for ref in refs):
+        return False
+    for tree in trees:
+        for node in tree.walk():
+            if node.conditions:
+                continue
+            quotes = " ".join(evidence[ref].quote for ref in node.evidence)
+            literals = node.value if isinstance(node.value, tuple) else (node.value,)
+            if not all(literal_is_cited(literal, quotes) for literal in literals):
+                return False
+    return quote_names_stage(evidence[rule.stage_evidence].quote, rule.triggers_at_stage)
 
-    if raw is MISSING_FACT:
+
+def _invocations(corpus: VerifiedCorpus, now: datetime) -> tuple[InvokedStage, ...]:
+    for invocation in corpus.invocations:
+        if (
+            invocation.source_state is not SourceState.VERIFIED
+            or invocation not in corpus.proved_invocations
+            or not _proved(invocation.citation, corpus)
+            or invocation.citation.source_doc != invocation.order_doc_id
+            or invocation.citation.source_hash != invocation.order_sha256
+            or not quote_names_stage(invocation.citation.quote, invocation.stage)
+        ):
+            raise CorpusIntegrityError("Official invocation cannot be re-proved from the snapshot")
+        if invocation.invoked_at.utcoffset() is None:
+            raise CorpusIntegrityError("Invocation time must include a timezone")
+        if invocation.lifecycle is InvocationLifecycle.REVOKED:
+            if (
+                invocation.revoked_at is None
+                or invocation.revoked_at.utcoffset() is None
+                or invocation.revoked_at <= invocation.invoked_at
+                or not _proved(invocation.revocation_citation, corpus)
+            ):
+                raise CorpusIntegrityError(
+                    "Historical invocation requires a proved later revocation"
+                )
+        elif not invocation.is_current:
+            raise CorpusIntegrityError("Active invocation has inconsistent revocation data")
+    active = tuple(i for i in corpus.invocations if i.is_current and i.invoked_at <= now)
+    if len(active) > 1:
+        raise CorpusIntegrityError("Multiple current official invocations; no stage is chosen")
+    return active
+
+
+def _replay_stage(corpus: VerifiedCorpus, context: ReplayContext) -> InvokedStage:
+    matches = tuple(
+        invocation
+        for invocation in corpus.invocations
+        if invocation.lifecycle is InvocationLifecycle.REVOKED
+        and invocation.invoked_at.date().isoformat() == context.invocation_date
+        and invocation.revoked_at is not None
+        and invocation.revoked_at.date().isoformat() == context.revocation_date
+    )
+    if len(matches) != 1:
+        raise CorpusIntegrityError("Replay context must match one verified historical invocation")
+    invocation = matches[0]
+    at = context.at or invocation.invoked_at
+    if not invocation.invoked_at <= at < invocation.revoked_at:
+        raise CorpusIntegrityError("Replay instant is outside the invocation's effective interval")
+    return invocation  # Keep REVOKED; never relabel history as an active invocation.
+
+
+def _evaluate_rule(
+    rule: Obligation, site: SiteProfile
+) -> tuple[bool | None, ObligationStatus, str]:
+    applies = evaluate(rule.applicability, site)
+    if applies.value is None:
+        return None, ObligationStatus.UNKNOWN, "Applicability is unknown. " + applies.reason
+    if not applies.value:
         return (
-            ObligationStatus.UNKNOWN,
-            f"Site fact {obligation.field!r} is not recorded for site {site.site_id}, "
-            f"so whether this obligation applies cannot be determined.",
+            False,
+            ObligationStatus.NOT_APPLICABLE,
+            "Outside this clause's scope. " + applies.reason,
         )
-
-    if raw is UNKNOWN_FACT:
+    if rule.clarification_when is not None:
+        unresolved = evaluate(rule.clarification_when, site)
+        if unresolved.value is not False:
+            return True, ObligationStatus.UNKNOWN, f"{rule.clarification} {unresolved.reason}"
+    requirement = evaluate(rule.requirement, site)
+    if requirement.value is None:
+        return True, ObligationStatus.UNKNOWN, "Compliance is unknown. " + requirement.reason
+    if requirement.value:
         return (
-            ObligationStatus.UNKNOWN,
-            f"Site fact {obligation.field!r} is recorded as unknown, "
-            f"so whether this obligation applies cannot be determined.",
-        )
-
-    try:
-        holds = apply_operator(obligation.operator, raw, obligation.value)
-    except TypeError:
-        # A type mismatch is a corpus authoring slip. Degrade to UNKNOWN rather than take
-        # the resolver down mid-halt, but say plainly that the comparison was impossible.
-        return (
-            ObligationStatus.UNKNOWN,
-            f"Cannot compare site fact {obligation.field!r} "
-            f"({type(raw).__name__}) using operator {obligation.operator!r} against "
-            f"{obligation.value!r} ({type(obligation.value).__name__}). "
-            f"Treated as unknown.",
-        )
-
-    if holds:
-        return (
+            True,
             ObligationStatus.MET,
-            f"Site fact {obligation.field!r} satisfies "
-            f"{obligation.operator} {obligation.value!r}, so this obligation applies.",
+            "Recorded facts satisfy this requirement. " + requirement.reason,
         )
     return (
+        True,
         ObligationStatus.NOT_MET,
-        f"Site fact {obligation.field!r} does not satisfy "
-        f"{obligation.operator} {obligation.value!r}, so this obligation does not apply.",
+        "Recorded facts violate this requirement. " + requirement.reason,
     )
 
 
 def resolve_obligations(
     *,
-    site: SiteProfile,
-    stage: InvokedStage | None,
-    obligations: Sequence[Obligation],
-    reading: StationReading | None,
+    site: ConstructionSite | SiteProfile,
+    corpus: VerifiedCorpus,
     now: datetime,
-) -> ObligationSet:
-    """Resolve `obligations` against `site` for the given invoked `stage`.
+    reading: StationReading | None = None,
+    replay: ReplayContext | None = None,
+) -> ResolutionResult:
+    """Resolve using only the official invocation contained in the verified snapshot.
 
-    `now` is injected rather than read, so resolution is reproducible. `reading` does not
-    affect any determination -- the stage comes from an order, not from arithmetic on an AQI
-    number -- but it is carried into the result so its provenance travels with the record.
+    No caller-supplied stage ordinal can manufacture an invocation. A discrepancy remains
+    visible in stage_status while the legal applicability basis remains the official order.
     """
+    if now.utcoffset() is None:
+        raise ValueError("Resolution time must include a timezone")
+    if isinstance(site, ConstructionSite):
+        site = site.to_profile()
+    active = _invocations(corpus, now)
+    current = active[0] if active else None
+    mode = ResolutionMode.REPLAY if replay is not None else ResolutionMode.CURRENT
+    stage = _replay_stage(corpus, replay) if replay is not None else current
+    replay_notice = None
+    if replay is not None:
+        replay_notice = (
+            f"Historical scenario replay: invocation {replay.invocation_date}, "
+            f"revocation {replay.revocation_date}. Uses the available verified corpus rules; "
+            "their schedule revision is not established as the one in force on the replay date. "
+            "This is not a current invocation or proof of historical obligations."
+        )
+    bands = tuple(
+        b
+        for b in corpus.stage_bands
+        if b.source_state is SourceState.VERIFIED
+        and b in corpus.proved_stage_bands
+        and _proved(b.citation, corpus)
+    )
+    stages = stage_status(invoked=stage, reading=reading, bands=bands, mode=mode)
     results: list[ObligationResult] = []
     excluded: list[ExcludedObligation] = []
-
-    for obligation in obligations:
-        if site.entity_type not in obligation.entity_types:
+    for rule in corpus.obligations:
+        if site.entity_type not in rule.entity_types:
             continue
-
-        if obligation.source_state is not SourceState.VERIFIED:
+        if not _rule_proved(rule, corpus):
             excluded.append(
                 ExcludedObligation(
-                    obligation_id=obligation.obligation_id,
-                    reason=_unsourced_reason(obligation),
+                    rule.obligation_id,
+                    "Citation and all condition evidence are not verified "
+                    "against hashed source bytes. "
+                    "Excluded from resolution; run make verify.",
                 )
             )
             continue
-
         if stage is None:
-            status = ObligationStatus.UNKNOWN
+            applicable, status = False, ObligationStatus.NOT_APPLICABLE
             reason = (
-                "No GRAP stage has been invoked by a CAQM order in the corpus, so whether "
-                "this obligation applies cannot be determined."
+                "No verified current official CAQM stage is invoked; "
+                "this stage-triggered clause is not activated."
             )
-        elif obligation.triggers_at_stage > stage.stage:
-            status = ObligationStatus.NOT_MET
+        elif rule.triggers_at_stage > stage.stage:
+            applicable, status = False, ObligationStatus.NOT_APPLICABLE
             reason = (
-                f"Obligation triggers at stage {obligation.triggers_at_stage}; "
-                f"stage {stage.stage} is invoked, so it does not apply."
+                f"Clause triggers at stage {rule.triggers_at_stage}; official stage "
+                f"{stage.stage} is lower, so this clause is not activated."
             )
         else:
-            status, reason = _evaluate(obligation, site)
-
+            applicable, status, reason = _evaluate_rule(rule, site)
+        if replay_notice is not None:
+            reason = replay_notice + " " + reason
         results.append(
             ObligationResult(
-                obligation_id=obligation.obligation_id,
+                obligation_id=rule.obligation_id,
+                applicable=applicable,
                 status=status,
-                label=obligation.label,
-                citation=obligation.citation,
+                required_action=rule.required_action,
+                label=rule.label,
+                citation=rule.citation,
+                evidence=tuple(dict.fromkeys(rule.citations)),
                 reason=reason,
-                issues_parchi=obligation.issues_parchi,
-                worker_entitlement_ref=obligation.worker_entitlement_ref,
+                issues_parchi=rule.issues_parchi,
+                worker_entitlement_ref=rule.worker_entitlement_ref,
+                mode=mode,
             )
         )
-
-    return ObligationSet(
+    return ResolutionResult(
         site_id=site.site_id,
         entity_type=site.entity_type,
         stage=stage,
@@ -153,4 +248,9 @@ def resolve_obligations(
         excluded_unsourced=tuple(excluded),
         reading=reading,
         resolved_at=now,
+        stage_status=stages,
+        mode=mode,
+        replay_context=replay,
+        replay_notice=replay_notice,
+        current_stage=current,
     )

@@ -7,14 +7,71 @@
       ],
       "triggers_at_stage": 1,
       "label": "Dust mitigation measures required for C&D activity (Stage I)",
-      "field": "has_dust_generating_activity",
-      "operator": "eq",
-      "value": true,
       "source_doc": "caqm-grap-schedule-2026-09-29",
       "page": 2,
       "quote": "Ensure proper implementation of Directions/ Rules/ Guidelines for enforcement of dust mitigation measures",
       "consequence": {
         "issues_parchi": false
+      },
+      "applicability": {
+        "field": "in_ncr",
+        "operator": "eq",
+        "value": true,
+        "evidence": [
+          "scope"
+        ]
+      },
+      "requirement": {
+        "operator": "and",
+        "conditions": [
+          {
+            "field": "dust_mitigation_compliant",
+            "operator": "eq",
+            "value": true,
+            "evidence": [
+              "dust"
+            ]
+          },
+          {
+            "field": "cd_waste_management_compliant",
+            "operator": "eq",
+            "value": true,
+            "evidence": [
+              "dust"
+            ]
+          }
+        ],
+        "evidence": [
+          "dust"
+        ]
+      },
+      "required_action": "Implement the cited dust-mitigation measures and sound environmental management of C&D waste.",
+      "stage_evidence": "stage",
+      "continuation_evidence": "continuation",
+      "action_evidence": [
+        "dust"
+      ],
+      "evidence": {
+        "continuation": {
+          "source_doc": "caqm-grap-schedule-2026-09-29",
+          "page": 1,
+          "quote": "Restrictive actions undertaken as per previous stages shall be continued, in addition to the air pollution stage under which the restrictive actions are envisaged to be taken."
+        },
+        "dust": {
+          "source_doc": "caqm-grap-schedule-2026-09-29",
+          "page": 2,
+          "quote": "Ensure proper implementation of Directions/ Rules/ Guidelines for enforcement of dust mitigation measures (C&D materials & waste are properly stored & duly covered, transportation of C&D materials/ waste only in covered vehicles, yardsticks for anti-smog guns, water sprinkling etc.) in Construction and Demolition (C&D) activities and sound environmental management of C&D waste."
+        },
+        "scope": {
+          "source_doc": "caqm-grap-schedule-2026-09-29",
+          "page": 1,
+          "quote": "The GRAP for the entire NCR"
+        },
+        "stage": {
+          "source_doc": "caqm-grap-schedule-2026-09-29",
+          "page": 2,
+          "quote": "Stage I – ‘Poor’ Air Quality (DELHI AQI ranging between 201-300)"
+        }
       }
     },
     {
@@ -23,15 +80,105 @@
         "construction_site"
       ],
       "triggers_at_stage": 1,
-      "label": "Large C&D projects must be registered on the state web portal (Stage I)",
-      "field": "plot_size_sqm",
-      "operator": "gte",
-      "value": 500,
+      "label": "Stage I: conditions for continuing large-project C&D work",
       "source_doc": "caqm-grap-schedule-2026-09-29",
       "page": 2,
-      "quote": "do not permit C&D activities in respect of such C&D projects with plot size equal to or more than 500 sqm , which are not registered on the \u2018web portal\u2019 of the respective State / GNCTD",
+      "quote": "do not permit C&D activities in respect of such C&D projects with plot size equal to or more than 500 sqm , which are not registered on the ‘web portal’ of the respective State / GNCTD",
       "consequence": {
         "issues_parchi": false
+      },
+      "applicability": {
+        "operator": "and",
+        "conditions": [
+          {
+            "field": "in_ncr",
+            "operator": "eq",
+            "value": true,
+            "evidence": [
+              "scope"
+            ]
+          },
+          {
+            "field": "plot_size_sqm",
+            "operator": "gte",
+            "value": 500,
+            "evidence": [
+              "registration"
+            ]
+          }
+        ],
+        "evidence": [
+          "scope",
+          "registration"
+        ]
+      },
+      "requirement": {
+        "operator": "or",
+        "conditions": [
+          {
+            "field": "activity_in_progress",
+            "operator": "eq",
+            "value": false,
+            "evidence": [
+              "registration"
+            ]
+          },
+          {
+            "operator": "and",
+            "conditions": [
+              {
+                "field": "registered_on_state_portal",
+                "operator": "eq",
+                "value": true,
+                "evidence": [
+                  "registration"
+                ]
+              },
+              {
+                "field": "remote_monitoring_requirements_met",
+                "operator": "eq",
+                "value": true,
+                "evidence": [
+                  "registration"
+                ]
+              }
+            ],
+            "evidence": [
+              "registration"
+            ]
+          }
+        ],
+        "evidence": [
+          "registration"
+        ]
+      },
+      "required_action": "Do not continue C&D at or above the cited plot size unless state-portal registration and the other cited remote-monitoring requirements are satisfied.",
+      "stage_evidence": "stage",
+      "continuation_evidence": "continuation",
+      "action_evidence": [
+        "registration"
+      ],
+      "evidence": {
+        "continuation": {
+          "source_doc": "caqm-grap-schedule-2026-09-29",
+          "page": 1,
+          "quote": "Restrictive actions undertaken as per previous stages shall be continued, in addition to the air pollution stage under which the restrictive actions are envisaged to be taken."
+        },
+        "registration": {
+          "source_doc": "caqm-grap-schedule-2026-09-29",
+          "page": 2,
+          "quote": "Ensure strict compliance of Direction Nos. 11-18 dated 11.06.2021 and do not permit C&D activities in respect of such C&D projects with plot size equal to or more than 500 sqm , which are not registered on the ‘web portal’ of the respective State / GNCTD and / or which do not fulfil the other requirements as per the above noted statutory Directions, for remote monitoring of dust mitigation measures."
+        },
+        "scope": {
+          "source_doc": "caqm-grap-schedule-2026-09-29",
+          "page": 1,
+          "quote": "The GRAP for the entire NCR"
+        },
+        "stage": {
+          "source_doc": "caqm-grap-schedule-2026-09-29",
+          "page": 2,
+          "quote": "Stage I – ‘Poor’ Air Quality (DELHI AQI ranging between 201-300)"
+        }
       }
     },
     {
@@ -41,14 +188,240 @@
       ],
       "triggers_at_stage": 3,
       "label": "Stage III: listed dust-generating C&D activities restricted across the NCR",
-      "field": "performs_restricted_cd_activity",
-      "operator": "eq",
-      "value": true,
       "source_doc": "caqm-grap-schedule-2026-09-29",
       "page": 11,
       "quote": "Enforce strict restrictions on the following categories of dust generating/ air pollution causing construction and demolition ( C&D) activities in the entire NCR",
       "consequence": {
         "issues_parchi": true
+      },
+      "applicability": {
+        "operator": "and",
+        "conditions": [
+          {
+            "field": "in_ncr",
+            "operator": "eq",
+            "value": true,
+            "evidence": [
+              "scope"
+            ]
+          },
+          {
+            "operator": "or",
+            "conditions": [
+              {
+                "field": "activity_type",
+                "operator": "in",
+                "value": [
+                  "Earthwork for excavation and filling including boring & drilling works.",
+                  "Piling works.",
+                  "All demolition works.",
+                  "Laying of sewer line, water line, drainage and electric cabling etc. by open trench system.",
+                  "Brick / masonry works.",
+                  "Operation of RMC batching plant.",
+                  "Major welding and gas -cutting operations",
+                  "Painting, polishing and varnishing works etc.",
+                  "Road construction activities and major repairs.",
+                  "Transfer, loading / unloading of dust generating materials like cement, fly -ash, bricks, sand, murram, pebbles, crushed stone etc. anywhere within / outside the project sites.",
+                  "Movement of vehicles carrying construction materials or C&D waste on unpaved roads."
+                ],
+                "evidence": [
+                  "activities",
+                  "unpaved"
+                ]
+              },
+              {
+                "operator": "and",
+                "conditions": [
+                  {
+                    "field": "activity_type",
+                    "operator": "in",
+                    "value": [
+                      "Cement, Plaster / other coatings",
+                      "Cutting / grinding and fixing of tiles, stones and other flooring materials"
+                    ],
+                    "evidence": [
+                      "activities"
+                    ]
+                  },
+                  {
+                    "field": "is_minor_indoor_repair",
+                    "operator": "eq",
+                    "value": false,
+                    "evidence": [
+                      "activities"
+                    ]
+                  }
+                ],
+                "evidence": [
+                  "activities"
+                ]
+              }
+            ],
+            "evidence": [
+              "activities",
+              "unpaved"
+            ]
+          }
+        ],
+        "evidence": [
+          "scope",
+          "activities",
+          "unpaved"
+        ]
+      },
+      "requirement": {
+        "operator": "or",
+        "conditions": [
+          {
+            "field": "activity_in_progress",
+            "operator": "eq",
+            "value": false,
+            "evidence": [
+              "activities",
+              "categories"
+            ]
+          },
+          {
+            "operator": "and",
+            "conditions": [
+              {
+                "operator": "or",
+                "conditions": [
+                  {
+                    "field": "project_category",
+                    "operator": "in",
+                    "value": [
+                      "Projects for Railway services and stations",
+                      "Projects for Metro Rail Services and stations",
+                      "Airports and Inter State Bus Terminals",
+                      "National security/ defence related activities/ projects of national importance",
+                      "Hospitals/ health care facilities",
+                      "Linear public projects",
+                      "Sanitation projects"
+                    ],
+                    "evidence": [
+                      "categories"
+                    ]
+                  },
+                  {
+                    "operator": "and",
+                    "conditions": [
+                      {
+                        "field": "project_category",
+                        "operator": "eq",
+                        "value": "Ancillary activities",
+                        "evidence": [
+                          "categories"
+                        ]
+                      },
+                      {
+                        "field": "ancillary_to_category",
+                        "operator": "in",
+                        "value": [
+                          "Projects for Railway services and stations",
+                          "Projects for Metro Rail Services and stations",
+                          "Airports and Inter State Bus Terminals",
+                          "National security/ defence related activities/ projects of national importance",
+                          "Hospitals/ health care facilities",
+                          "Linear public projects",
+                          "Sanitation projects"
+                        ],
+                        "evidence": [
+                          "categories"
+                        ]
+                      }
+                    ],
+                    "evidence": [
+                      "categories"
+                    ]
+                  }
+                ],
+                "evidence": [
+                  "categories"
+                ]
+              },
+              {
+                "operator": "and",
+                "conditions": [
+                  {
+                    "field": "dust_mitigation_compliant",
+                    "operator": "eq",
+                    "value": true,
+                    "evidence": [
+                      "categories"
+                    ]
+                  },
+                  {
+                    "field": "cd_waste_management_compliant",
+                    "operator": "eq",
+                    "value": true,
+                    "evidence": [
+                      "categories"
+                    ]
+                  },
+                  {
+                    "field": "commission_directions_compliant",
+                    "operator": "eq",
+                    "value": true,
+                    "evidence": [
+                      "categories"
+                    ]
+                  }
+                ],
+                "evidence": [
+                  "categories"
+                ]
+              }
+            ],
+            "evidence": [
+              "categories"
+            ]
+          }
+        ],
+        "evidence": [
+          "activities",
+          "categories"
+        ]
+      },
+      "required_action": "Suspend the listed restricted activity unless the project qualifies for the cited category exception and satisfies all its compliance conditions.",
+      "stage_evidence": "stage",
+      "continuation_evidence": "continuation",
+      "action_evidence": [
+        "activities",
+        "unpaved",
+        "categories"
+      ],
+      "evidence": {
+        "activities": {
+          "source_doc": "caqm-grap-schedule-2026-09-29",
+          "page": 11,
+          "quote": "Enforce strict restrictions on the following categories of dust generating/ air pollution causing construction and demolition ( C&D) activities in the entire NCR: • Earthwork for excavation and filling including boring & drilling works. • Piling works. • All demolition works. • Laying of sewer line, water line, drainage and electric cabling etc. by open trench system. • Brick / masonry works. • Operation of RMC batching plant. • Major welding and gas -cutting operations . Minor welding activities for MEP works (Mechanical, Electrical and Plumbing) to be, however, permitted. • Painting, polishing and varnishing works etc. • Cement, Plaster / other coatings, except for minor indoor repairs / maintenance. • Cutting / grinding and fixing of tiles, stones and other flooring materials, except for minor indoor repairs/maintenance. • Road construction activities and major repairs. Repairing of potholes shall, however, be permitted. • Transfer, loading / unloading of dust generating materials like cement, fly -ash, bricks, sand, murram, pebbles, crushed stone etc. anywhere within / outside the project sites."
+        },
+        "categories": {
+          "source_doc": "caqm-grap-schedule-2026-09-29",
+          "page": 12,
+          "quote": "All C&D related activities , including those under 1(i) above , shall be continued to be permitted only for the following categories of projects, however subject to strict compliance of the C&D Waste Management Rules, dust prevention/ control norms including compliance with the directions of the Commission issued from time to time: a) Projects for Railway services and stations b) Projects for Metro Rail Services and stations c) Airports and Inter State Bus Terminals d) National security/ defence related activities/ projects of national importance; e) Hospitals/ health care facilities f) Linear public projects such as highways, roads, flyovers, over bridges, power transmission/ distribution, pipelines, tele - communication services etc. g) Sanitation projects like sewage treatment plants and water supply projects etc. h) Ancillary activities, specific to and supplementing the above project categories."
+        },
+        "continuation": {
+          "source_doc": "caqm-grap-schedule-2026-09-29",
+          "page": 1,
+          "quote": "Restrictive actions undertaken as per previous stages shall be continued, in addition to the air pollution stage under which the restrictive actions are envisaged to be taken."
+        },
+        "scope": {
+          "source_doc": "caqm-grap-schedule-2026-09-29",
+          "page": 1,
+          "quote": "The GRAP for the entire NCR"
+        },
+        "stage": {
+          "source_doc": "caqm-grap-schedule-2026-09-29",
+          "page": 11,
+          "quote": "Stage III – ‘Severe’ Air Quality (DELHI AQI ranging between 401-450)"
+        },
+        "unpaved": {
+          "source_doc": "caqm-grap-schedule-2026-09-29",
+          "page": 12,
+          "quote": "Movement of vehicles carrying construction materials or C&D waste on unpaved roads."
+        }
       }
     },
     {
@@ -58,14 +431,185 @@
       ],
       "triggers_at_stage": 3,
       "label": "Stage III: demolition works restricted across the NCR",
-      "field": "performs_demolition",
-      "operator": "eq",
-      "value": true,
       "source_doc": "caqm-grap-schedule-2026-09-29",
       "page": 11,
       "quote": "All demolition works.",
       "consequence": {
         "issues_parchi": true
+      },
+      "applicability": {
+        "operator": "and",
+        "conditions": [
+          {
+            "field": "in_ncr",
+            "operator": "eq",
+            "value": true,
+            "evidence": [
+              "scope"
+            ]
+          },
+          {
+            "field": "activity_type",
+            "operator": "eq",
+            "value": "All demolition works.",
+            "evidence": [
+              "clause"
+            ]
+          }
+        ],
+        "evidence": [
+          "scope",
+          "clause"
+        ]
+      },
+      "requirement": {
+        "operator": "or",
+        "conditions": [
+          {
+            "field": "activity_in_progress",
+            "operator": "eq",
+            "value": false,
+            "evidence": [
+              "activities",
+              "categories"
+            ]
+          },
+          {
+            "operator": "and",
+            "conditions": [
+              {
+                "operator": "or",
+                "conditions": [
+                  {
+                    "field": "project_category",
+                    "operator": "in",
+                    "value": [
+                      "Projects for Railway services and stations",
+                      "Projects for Metro Rail Services and stations",
+                      "Airports and Inter State Bus Terminals",
+                      "National security/ defence related activities/ projects of national importance",
+                      "Hospitals/ health care facilities",
+                      "Linear public projects",
+                      "Sanitation projects"
+                    ],
+                    "evidence": [
+                      "categories"
+                    ]
+                  },
+                  {
+                    "operator": "and",
+                    "conditions": [
+                      {
+                        "field": "project_category",
+                        "operator": "eq",
+                        "value": "Ancillary activities",
+                        "evidence": [
+                          "categories"
+                        ]
+                      },
+                      {
+                        "field": "ancillary_to_category",
+                        "operator": "in",
+                        "value": [
+                          "Projects for Railway services and stations",
+                          "Projects for Metro Rail Services and stations",
+                          "Airports and Inter State Bus Terminals",
+                          "National security/ defence related activities/ projects of national importance",
+                          "Hospitals/ health care facilities",
+                          "Linear public projects",
+                          "Sanitation projects"
+                        ],
+                        "evidence": [
+                          "categories"
+                        ]
+                      }
+                    ],
+                    "evidence": [
+                      "categories"
+                    ]
+                  }
+                ],
+                "evidence": [
+                  "categories"
+                ]
+              },
+              {
+                "operator": "and",
+                "conditions": [
+                  {
+                    "field": "dust_mitigation_compliant",
+                    "operator": "eq",
+                    "value": true,
+                    "evidence": [
+                      "categories"
+                    ]
+                  },
+                  {
+                    "field": "cd_waste_management_compliant",
+                    "operator": "eq",
+                    "value": true,
+                    "evidence": [
+                      "categories"
+                    ]
+                  },
+                  {
+                    "field": "commission_directions_compliant",
+                    "operator": "eq",
+                    "value": true,
+                    "evidence": [
+                      "categories"
+                    ]
+                  }
+                ],
+                "evidence": [
+                  "categories"
+                ]
+              }
+            ],
+            "evidence": [
+              "categories"
+            ]
+          }
+        ],
+        "evidence": [
+          "activities",
+          "categories"
+        ]
+      },
+      "required_action": "Suspend demolition work unless the project qualifies for the cited category exception and satisfies all its compliance conditions.",
+      "stage_evidence": "stage",
+      "continuation_evidence": "continuation",
+      "action_evidence": [
+        "clause",
+        "activities",
+        "categories"
+      ],
+      "evidence": {
+        "activities": {
+          "source_doc": "caqm-grap-schedule-2026-09-29",
+          "page": 11,
+          "quote": "Enforce strict restrictions on the following categories of dust generating/ air pollution causing construction and demolition ( C&D) activities in the entire NCR: • Earthwork for excavation and filling including boring & drilling works. • Piling works. • All demolition works. • Laying of sewer line, water line, drainage and electric cabling etc. by open trench system. • Brick / masonry works. • Operation of RMC batching plant. • Major welding and gas -cutting operations . Minor welding activities for MEP works (Mechanical, Electrical and Plumbing) to be, however, permitted. • Painting, polishing and varnishing works etc. • Cement, Plaster / other coatings, except for minor indoor repairs / maintenance. • Cutting / grinding and fixing of tiles, stones and other flooring materials, except for minor indoor repairs/maintenance. • Road construction activities and major repairs. Repairing of potholes shall, however, be permitted. • Transfer, loading / unloading of dust generating materials like cement, fly -ash, bricks, sand, murram, pebbles, crushed stone etc. anywhere within / outside the project sites."
+        },
+        "categories": {
+          "source_doc": "caqm-grap-schedule-2026-09-29",
+          "page": 12,
+          "quote": "All C&D related activities , including those under 1(i) above , shall be continued to be permitted only for the following categories of projects, however subject to strict compliance of the C&D Waste Management Rules, dust prevention/ control norms including compliance with the directions of the Commission issued from time to time: a) Projects for Railway services and stations b) Projects for Metro Rail Services and stations c) Airports and Inter State Bus Terminals d) National security/ defence related activities/ projects of national importance; e) Hospitals/ health care facilities f) Linear public projects such as highways, roads, flyovers, over bridges, power transmission/ distribution, pipelines, tele - communication services etc. g) Sanitation projects like sewage treatment plants and water supply projects etc. h) Ancillary activities, specific to and supplementing the above project categories."
+        },
+        "continuation": {
+          "source_doc": "caqm-grap-schedule-2026-09-29",
+          "page": 1,
+          "quote": "Restrictive actions undertaken as per previous stages shall be continued, in addition to the air pollution stage under which the restrictive actions are envisaged to be taken."
+        },
+        "scope": {
+          "source_doc": "caqm-grap-schedule-2026-09-29",
+          "page": 1,
+          "quote": "The GRAP for the entire NCR"
+        },
+        "stage": {
+          "source_doc": "caqm-grap-schedule-2026-09-29",
+          "page": 11,
+          "quote": "Stage III – ‘Severe’ Air Quality (DELHI AQI ranging between 401-450)"
+        }
       }
     },
     {
@@ -75,14 +619,185 @@
       ],
       "triggers_at_stage": 3,
       "label": "Stage III: piling works restricted across the NCR",
-      "field": "performs_piling",
-      "operator": "eq",
-      "value": true,
       "source_doc": "caqm-grap-schedule-2026-09-29",
       "page": 11,
       "quote": "Piling works.",
       "consequence": {
         "issues_parchi": true
+      },
+      "applicability": {
+        "operator": "and",
+        "conditions": [
+          {
+            "field": "in_ncr",
+            "operator": "eq",
+            "value": true,
+            "evidence": [
+              "scope"
+            ]
+          },
+          {
+            "field": "activity_type",
+            "operator": "eq",
+            "value": "Piling works.",
+            "evidence": [
+              "clause"
+            ]
+          }
+        ],
+        "evidence": [
+          "scope",
+          "clause"
+        ]
+      },
+      "requirement": {
+        "operator": "or",
+        "conditions": [
+          {
+            "field": "activity_in_progress",
+            "operator": "eq",
+            "value": false,
+            "evidence": [
+              "activities",
+              "categories"
+            ]
+          },
+          {
+            "operator": "and",
+            "conditions": [
+              {
+                "operator": "or",
+                "conditions": [
+                  {
+                    "field": "project_category",
+                    "operator": "in",
+                    "value": [
+                      "Projects for Railway services and stations",
+                      "Projects for Metro Rail Services and stations",
+                      "Airports and Inter State Bus Terminals",
+                      "National security/ defence related activities/ projects of national importance",
+                      "Hospitals/ health care facilities",
+                      "Linear public projects",
+                      "Sanitation projects"
+                    ],
+                    "evidence": [
+                      "categories"
+                    ]
+                  },
+                  {
+                    "operator": "and",
+                    "conditions": [
+                      {
+                        "field": "project_category",
+                        "operator": "eq",
+                        "value": "Ancillary activities",
+                        "evidence": [
+                          "categories"
+                        ]
+                      },
+                      {
+                        "field": "ancillary_to_category",
+                        "operator": "in",
+                        "value": [
+                          "Projects for Railway services and stations",
+                          "Projects for Metro Rail Services and stations",
+                          "Airports and Inter State Bus Terminals",
+                          "National security/ defence related activities/ projects of national importance",
+                          "Hospitals/ health care facilities",
+                          "Linear public projects",
+                          "Sanitation projects"
+                        ],
+                        "evidence": [
+                          "categories"
+                        ]
+                      }
+                    ],
+                    "evidence": [
+                      "categories"
+                    ]
+                  }
+                ],
+                "evidence": [
+                  "categories"
+                ]
+              },
+              {
+                "operator": "and",
+                "conditions": [
+                  {
+                    "field": "dust_mitigation_compliant",
+                    "operator": "eq",
+                    "value": true,
+                    "evidence": [
+                      "categories"
+                    ]
+                  },
+                  {
+                    "field": "cd_waste_management_compliant",
+                    "operator": "eq",
+                    "value": true,
+                    "evidence": [
+                      "categories"
+                    ]
+                  },
+                  {
+                    "field": "commission_directions_compliant",
+                    "operator": "eq",
+                    "value": true,
+                    "evidence": [
+                      "categories"
+                    ]
+                  }
+                ],
+                "evidence": [
+                  "categories"
+                ]
+              }
+            ],
+            "evidence": [
+              "categories"
+            ]
+          }
+        ],
+        "evidence": [
+          "activities",
+          "categories"
+        ]
+      },
+      "required_action": "Suspend piling work unless the project qualifies for the cited category exception and satisfies all its compliance conditions.",
+      "stage_evidence": "stage",
+      "continuation_evidence": "continuation",
+      "action_evidence": [
+        "clause",
+        "activities",
+        "categories"
+      ],
+      "evidence": {
+        "activities": {
+          "source_doc": "caqm-grap-schedule-2026-09-29",
+          "page": 11,
+          "quote": "Enforce strict restrictions on the following categories of dust generating/ air pollution causing construction and demolition ( C&D) activities in the entire NCR: • Earthwork for excavation and filling including boring & drilling works. • Piling works. • All demolition works. • Laying of sewer line, water line, drainage and electric cabling etc. by open trench system. • Brick / masonry works. • Operation of RMC batching plant. • Major welding and gas -cutting operations . Minor welding activities for MEP works (Mechanical, Electrical and Plumbing) to be, however, permitted. • Painting, polishing and varnishing works etc. • Cement, Plaster / other coatings, except for minor indoor repairs / maintenance. • Cutting / grinding and fixing of tiles, stones and other flooring materials, except for minor indoor repairs/maintenance. • Road construction activities and major repairs. Repairing of potholes shall, however, be permitted. • Transfer, loading / unloading of dust generating materials like cement, fly -ash, bricks, sand, murram, pebbles, crushed stone etc. anywhere within / outside the project sites."
+        },
+        "categories": {
+          "source_doc": "caqm-grap-schedule-2026-09-29",
+          "page": 12,
+          "quote": "All C&D related activities , including those under 1(i) above , shall be continued to be permitted only for the following categories of projects, however subject to strict compliance of the C&D Waste Management Rules, dust prevention/ control norms including compliance with the directions of the Commission issued from time to time: a) Projects for Railway services and stations b) Projects for Metro Rail Services and stations c) Airports and Inter State Bus Terminals d) National security/ defence related activities/ projects of national importance; e) Hospitals/ health care facilities f) Linear public projects such as highways, roads, flyovers, over bridges, power transmission/ distribution, pipelines, tele - communication services etc. g) Sanitation projects like sewage treatment plants and water supply projects etc. h) Ancillary activities, specific to and supplementing the above project categories."
+        },
+        "continuation": {
+          "source_doc": "caqm-grap-schedule-2026-09-29",
+          "page": 1,
+          "quote": "Restrictive actions undertaken as per previous stages shall be continued, in addition to the air pollution stage under which the restrictive actions are envisaged to be taken."
+        },
+        "scope": {
+          "source_doc": "caqm-grap-schedule-2026-09-29",
+          "page": 1,
+          "quote": "The GRAP for the entire NCR"
+        },
+        "stage": {
+          "source_doc": "caqm-grap-schedule-2026-09-29",
+          "page": 11,
+          "quote": "Stage III – ‘Severe’ Air Quality (DELHI AQI ranging between 401-450)"
+        }
       }
     },
     {
@@ -92,14 +807,185 @@
       ],
       "triggers_at_stage": 3,
       "label": "Stage III: no movement of construction/C&D vehicles on unpaved roads",
-      "field": "moves_material_on_unpaved_road",
-      "operator": "eq",
-      "value": true,
       "source_doc": "caqm-grap-schedule-2026-09-29",
       "page": 12,
       "quote": "Movement of vehicles carrying construction materials or C&D waste on unpaved roads.",
       "consequence": {
         "issues_parchi": true
+      },
+      "applicability": {
+        "operator": "and",
+        "conditions": [
+          {
+            "field": "in_ncr",
+            "operator": "eq",
+            "value": true,
+            "evidence": [
+              "scope"
+            ]
+          },
+          {
+            "field": "activity_type",
+            "operator": "eq",
+            "value": "Movement of vehicles carrying construction materials or C&D waste on unpaved roads.",
+            "evidence": [
+              "clause"
+            ]
+          }
+        ],
+        "evidence": [
+          "scope",
+          "clause"
+        ]
+      },
+      "requirement": {
+        "operator": "or",
+        "conditions": [
+          {
+            "field": "activity_in_progress",
+            "operator": "eq",
+            "value": false,
+            "evidence": [
+              "activities",
+              "categories"
+            ]
+          },
+          {
+            "operator": "and",
+            "conditions": [
+              {
+                "operator": "or",
+                "conditions": [
+                  {
+                    "field": "project_category",
+                    "operator": "in",
+                    "value": [
+                      "Projects for Railway services and stations",
+                      "Projects for Metro Rail Services and stations",
+                      "Airports and Inter State Bus Terminals",
+                      "National security/ defence related activities/ projects of national importance",
+                      "Hospitals/ health care facilities",
+                      "Linear public projects",
+                      "Sanitation projects"
+                    ],
+                    "evidence": [
+                      "categories"
+                    ]
+                  },
+                  {
+                    "operator": "and",
+                    "conditions": [
+                      {
+                        "field": "project_category",
+                        "operator": "eq",
+                        "value": "Ancillary activities",
+                        "evidence": [
+                          "categories"
+                        ]
+                      },
+                      {
+                        "field": "ancillary_to_category",
+                        "operator": "in",
+                        "value": [
+                          "Projects for Railway services and stations",
+                          "Projects for Metro Rail Services and stations",
+                          "Airports and Inter State Bus Terminals",
+                          "National security/ defence related activities/ projects of national importance",
+                          "Hospitals/ health care facilities",
+                          "Linear public projects",
+                          "Sanitation projects"
+                        ],
+                        "evidence": [
+                          "categories"
+                        ]
+                      }
+                    ],
+                    "evidence": [
+                      "categories"
+                    ]
+                  }
+                ],
+                "evidence": [
+                  "categories"
+                ]
+              },
+              {
+                "operator": "and",
+                "conditions": [
+                  {
+                    "field": "dust_mitigation_compliant",
+                    "operator": "eq",
+                    "value": true,
+                    "evidence": [
+                      "categories"
+                    ]
+                  },
+                  {
+                    "field": "cd_waste_management_compliant",
+                    "operator": "eq",
+                    "value": true,
+                    "evidence": [
+                      "categories"
+                    ]
+                  },
+                  {
+                    "field": "commission_directions_compliant",
+                    "operator": "eq",
+                    "value": true,
+                    "evidence": [
+                      "categories"
+                    ]
+                  }
+                ],
+                "evidence": [
+                  "categories"
+                ]
+              }
+            ],
+            "evidence": [
+              "categories"
+            ]
+          }
+        ],
+        "evidence": [
+          "activities",
+          "categories"
+        ]
+      },
+      "required_action": "Suspend vehicle movement carrying construction materials or C&D waste on unpaved roads unless the project qualifies for the cited category exception and satisfies all its compliance conditions.",
+      "stage_evidence": "stage",
+      "continuation_evidence": "continuation",
+      "action_evidence": [
+        "clause",
+        "activities",
+        "categories"
+      ],
+      "evidence": {
+        "activities": {
+          "source_doc": "caqm-grap-schedule-2026-09-29",
+          "page": 11,
+          "quote": "Enforce strict restrictions on the following categories of dust generating/ air pollution causing construction and demolition ( C&D) activities in the entire NCR: • Earthwork for excavation and filling including boring & drilling works. • Piling works. • All demolition works. • Laying of sewer line, water line, drainage and electric cabling etc. by open trench system. • Brick / masonry works. • Operation of RMC batching plant. • Major welding and gas -cutting operations . Minor welding activities for MEP works (Mechanical, Electrical and Plumbing) to be, however, permitted. • Painting, polishing and varnishing works etc. • Cement, Plaster / other coatings, except for minor indoor repairs / maintenance. • Cutting / grinding and fixing of tiles, stones and other flooring materials, except for minor indoor repairs/maintenance. • Road construction activities and major repairs. Repairing of potholes shall, however, be permitted. • Transfer, loading / unloading of dust generating materials like cement, fly -ash, bricks, sand, murram, pebbles, crushed stone etc. anywhere within / outside the project sites."
+        },
+        "categories": {
+          "source_doc": "caqm-grap-schedule-2026-09-29",
+          "page": 12,
+          "quote": "All C&D related activities , including those under 1(i) above , shall be continued to be permitted only for the following categories of projects, however subject to strict compliance of the C&D Waste Management Rules, dust prevention/ control norms including compliance with the directions of the Commission issued from time to time: a) Projects for Railway services and stations b) Projects for Metro Rail Services and stations c) Airports and Inter State Bus Terminals d) National security/ defence related activities/ projects of national importance; e) Hospitals/ health care facilities f) Linear public projects such as highways, roads, flyovers, over bridges, power transmission/ distribution, pipelines, tele - communication services etc. g) Sanitation projects like sewage treatment plants and water supply projects etc. h) Ancillary activities, specific to and supplementing the above project categories."
+        },
+        "continuation": {
+          "source_doc": "caqm-grap-schedule-2026-09-29",
+          "page": 1,
+          "quote": "Restrictive actions undertaken as per previous stages shall be continued, in addition to the air pollution stage under which the restrictive actions are envisaged to be taken."
+        },
+        "scope": {
+          "source_doc": "caqm-grap-schedule-2026-09-29",
+          "page": 1,
+          "quote": "The GRAP for the entire NCR"
+        },
+        "stage": {
+          "source_doc": "caqm-grap-schedule-2026-09-29",
+          "page": 11,
+          "quote": "Stage III – ‘Severe’ Air Quality (DELHI AQI ranging between 401-450)"
+        }
       }
     },
     {
@@ -108,15 +994,315 @@
         "construction_site"
       ],
       "triggers_at_stage": 3,
-      "label": "Stage III: C&D permitted only for listed exempt project categories",
-      "field": "is_permitted_cd_project_category",
-      "operator": "eq",
-      "value": false,
+      "label": "Stage III: cited project-category conditions for continuing C&D",
       "source_doc": "caqm-grap-schedule-2026-09-29",
       "page": 12,
       "quote": "All C&D related activities , including those under 1(i) above , shall be continued to be permitted only for the following categories of projects",
       "consequence": {
         "issues_parchi": true
+      },
+      "clarification": "Stage III item 1(ii) permits other less-polluting activities subject to controls, while item 1(iii) says all C&D is permitted only for listed project categories. Their application to continuing non-listed activity at a non-listed project requires source clarification; neither a ban nor permission is inferred.",
+      "applicability": {
+        "field": "in_ncr",
+        "operator": "eq",
+        "value": true,
+        "evidence": [
+          "scope"
+        ]
+      },
+      "requirement": {
+        "operator": "or",
+        "conditions": [
+          {
+            "field": "activity_in_progress",
+            "operator": "eq",
+            "value": false,
+            "evidence": [
+              "activities",
+              "categories"
+            ]
+          },
+          {
+            "operator": "and",
+            "conditions": [
+              {
+                "operator": "or",
+                "conditions": [
+                  {
+                    "field": "project_category",
+                    "operator": "in",
+                    "value": [
+                      "Projects for Railway services and stations",
+                      "Projects for Metro Rail Services and stations",
+                      "Airports and Inter State Bus Terminals",
+                      "National security/ defence related activities/ projects of national importance",
+                      "Hospitals/ health care facilities",
+                      "Linear public projects",
+                      "Sanitation projects"
+                    ],
+                    "evidence": [
+                      "categories"
+                    ]
+                  },
+                  {
+                    "operator": "and",
+                    "conditions": [
+                      {
+                        "field": "project_category",
+                        "operator": "eq",
+                        "value": "Ancillary activities",
+                        "evidence": [
+                          "categories"
+                        ]
+                      },
+                      {
+                        "field": "ancillary_to_category",
+                        "operator": "in",
+                        "value": [
+                          "Projects for Railway services and stations",
+                          "Projects for Metro Rail Services and stations",
+                          "Airports and Inter State Bus Terminals",
+                          "National security/ defence related activities/ projects of national importance",
+                          "Hospitals/ health care facilities",
+                          "Linear public projects",
+                          "Sanitation projects"
+                        ],
+                        "evidence": [
+                          "categories"
+                        ]
+                      }
+                    ],
+                    "evidence": [
+                      "categories"
+                    ]
+                  }
+                ],
+                "evidence": [
+                  "categories"
+                ]
+              },
+              {
+                "operator": "and",
+                "conditions": [
+                  {
+                    "field": "dust_mitigation_compliant",
+                    "operator": "eq",
+                    "value": true,
+                    "evidence": [
+                      "categories"
+                    ]
+                  },
+                  {
+                    "field": "cd_waste_management_compliant",
+                    "operator": "eq",
+                    "value": true,
+                    "evidence": [
+                      "categories"
+                    ]
+                  },
+                  {
+                    "field": "commission_directions_compliant",
+                    "operator": "eq",
+                    "value": true,
+                    "evidence": [
+                      "categories"
+                    ]
+                  }
+                ],
+                "evidence": [
+                  "categories"
+                ]
+              }
+            ],
+            "evidence": [
+              "categories"
+            ]
+          }
+        ],
+        "evidence": [
+          "activities",
+          "categories"
+        ]
+      },
+      "required_action": "For listed restricted activities, suspend work unless the complete cited category exception and compliance conditions are established. Clarify the interaction with the separate less-polluting-work allowance before classifying the flagged cases.",
+      "stage_evidence": "stage",
+      "continuation_evidence": "continuation",
+      "action_evidence": [
+        "categories",
+        "less_polluting"
+      ],
+      "clarification_when": {
+        "operator": "and",
+        "conditions": [
+          {
+            "field": "activity_in_progress",
+            "operator": "eq",
+            "value": true,
+            "evidence": [
+              "less_polluting",
+              "categories"
+            ]
+          },
+          {
+            "operator": "or",
+            "conditions": [
+              {
+                "field": "activity_type",
+                "operator": "not_in",
+                "value": [
+                  "Earthwork for excavation and filling including boring & drilling works.",
+                  "Piling works.",
+                  "All demolition works.",
+                  "Laying of sewer line, water line, drainage and electric cabling etc. by open trench system.",
+                  "Brick / masonry works.",
+                  "Operation of RMC batching plant.",
+                  "Major welding and gas -cutting operations",
+                  "Painting, polishing and varnishing works etc.",
+                  "Road construction activities and major repairs.",
+                  "Transfer, loading / unloading of dust generating materials like cement, fly -ash, bricks, sand, murram, pebbles, crushed stone etc. anywhere within / outside the project sites.",
+                  "Movement of vehicles carrying construction materials or C&D waste on unpaved roads.",
+                  "Cement, Plaster / other coatings",
+                  "Cutting / grinding and fixing of tiles, stones and other flooring materials"
+                ],
+                "evidence": [
+                  "activities",
+                  "unpaved"
+                ]
+              },
+              {
+                "operator": "and",
+                "conditions": [
+                  {
+                    "field": "activity_type",
+                    "operator": "in",
+                    "value": [
+                      "Cement, Plaster / other coatings",
+                      "Cutting / grinding and fixing of tiles, stones and other flooring materials"
+                    ],
+                    "evidence": [
+                      "activities"
+                    ]
+                  },
+                  {
+                    "field": "is_minor_indoor_repair",
+                    "operator": "eq",
+                    "value": true,
+                    "evidence": [
+                      "activities"
+                    ]
+                  }
+                ],
+                "evidence": [
+                  "activities"
+                ]
+              }
+            ],
+            "evidence": [
+              "activities",
+              "unpaved"
+            ]
+          },
+          {
+            "operator": "or",
+            "conditions": [
+              {
+                "field": "project_category",
+                "operator": "not_in",
+                "value": [
+                  "Projects for Railway services and stations",
+                  "Projects for Metro Rail Services and stations",
+                  "Airports and Inter State Bus Terminals",
+                  "National security/ defence related activities/ projects of national importance",
+                  "Hospitals/ health care facilities",
+                  "Linear public projects",
+                  "Sanitation projects",
+                  "Ancillary activities"
+                ],
+                "evidence": [
+                  "categories"
+                ]
+              },
+              {
+                "operator": "and",
+                "conditions": [
+                  {
+                    "field": "project_category",
+                    "operator": "eq",
+                    "value": "Ancillary activities",
+                    "evidence": [
+                      "categories"
+                    ]
+                  },
+                  {
+                    "field": "ancillary_to_category",
+                    "operator": "not_in",
+                    "value": [
+                      "Projects for Railway services and stations",
+                      "Projects for Metro Rail Services and stations",
+                      "Airports and Inter State Bus Terminals",
+                      "National security/ defence related activities/ projects of national importance",
+                      "Hospitals/ health care facilities",
+                      "Linear public projects",
+                      "Sanitation projects"
+                    ],
+                    "evidence": [
+                      "categories"
+                    ]
+                  }
+                ],
+                "evidence": [
+                  "categories"
+                ]
+              }
+            ],
+            "evidence": [
+              "categories"
+            ]
+          }
+        ],
+        "evidence": [
+          "less_polluting",
+          "categories",
+          "activities",
+          "unpaved"
+        ]
+      },
+      "evidence": {
+        "activities": {
+          "source_doc": "caqm-grap-schedule-2026-09-29",
+          "page": 11,
+          "quote": "Enforce strict restrictions on the following categories of dust generating/ air pollution causing construction and demolition ( C&D) activities in the entire NCR: • Earthwork for excavation and filling including boring & drilling works. • Piling works. • All demolition works. • Laying of sewer line, water line, drainage and electric cabling etc. by open trench system. • Brick / masonry works. • Operation of RMC batching plant. • Major welding and gas -cutting operations . Minor welding activities for MEP works (Mechanical, Electrical and Plumbing) to be, however, permitted. • Painting, polishing and varnishing works etc. • Cement, Plaster / other coatings, except for minor indoor repairs / maintenance. • Cutting / grinding and fixing of tiles, stones and other flooring materials, except for minor indoor repairs/maintenance. • Road construction activities and major repairs. Repairing of potholes shall, however, be permitted. • Transfer, loading / unloading of dust generating materials like cement, fly -ash, bricks, sand, murram, pebbles, crushed stone etc. anywhere within / outside the project sites."
+        },
+        "categories": {
+          "source_doc": "caqm-grap-schedule-2026-09-29",
+          "page": 12,
+          "quote": "All C&D related activities , including those under 1(i) above , shall be continued to be permitted only for the following categories of projects, however subject to strict compliance of the C&D Waste Management Rules, dust prevention/ control norms including compliance with the directions of the Commission issued from time to time: a) Projects for Railway services and stations b) Projects for Metro Rail Services and stations c) Airports and Inter State Bus Terminals d) National security/ defence related activities/ projects of national importance; e) Hospitals/ health care facilities f) Linear public projects such as highways, roads, flyovers, over bridges, power transmission/ distribution, pipelines, tele - communication services etc. g) Sanitation projects like sewage treatment plants and water supply projects etc. h) Ancillary activities, specific to and supplementing the above project categories."
+        },
+        "continuation": {
+          "source_doc": "caqm-grap-schedule-2026-09-29",
+          "page": 1,
+          "quote": "Restrictive actions undertaken as per previous stages shall be continued, in addition to the air pollution stage under which the restrictive actions are envisaged to be taken."
+        },
+        "less_polluting": {
+          "source_doc": "caqm-grap-schedule-2026-09-29",
+          "page": 12,
+          "quote": "All construction related activities, other than those listed under 1(i) above , which are relatively less polluting / less dust generating shall be permitted to be continued in the NCR, subject to strict compliance of the C&D Waste Management Rules, dust prevention/ control norms including compliance with the directions of the Commission issued from time to time."
+        },
+        "scope": {
+          "source_doc": "caqm-grap-schedule-2026-09-29",
+          "page": 1,
+          "quote": "The GRAP for the entire NCR"
+        },
+        "stage": {
+          "source_doc": "caqm-grap-schedule-2026-09-29",
+          "page": 11,
+          "quote": "Stage III – ‘Severe’ Air Quality (DELHI AQI ranging between 401-450)"
+        },
+        "unpaved": {
+          "source_doc": "caqm-grap-schedule-2026-09-29",
+          "page": 12,
+          "quote": "Movement of vehicles carrying construction materials or C&D waste on unpaved roads."
+        }
       }
     },
     {
@@ -126,14 +1312,138 @@
       ],
       "triggers_at_stage": 4,
       "label": "Stage IV: C&D ban extended to linear public projects",
-      "field": "is_linear_public_project",
-      "operator": "eq",
-      "value": true,
       "source_doc": "caqm-grap-schedule-2026-09-29",
       "page": 16,
       "quote": "Ban C&D activities, as in the GRAP Stage- III, also for linear public projects such as highways, roads, flyo vers, overbridges, power transmission, pipelines, tele - communication etc.",
       "consequence": {
         "issues_parchi": true
+      },
+      "applicability": {
+        "operator": "and",
+        "conditions": [
+          {
+            "field": "in_ncr",
+            "operator": "eq",
+            "value": true,
+            "evidence": [
+              "scope"
+            ]
+          },
+          {
+            "field": "project_category",
+            "operator": "eq",
+            "value": "Linear public projects",
+            "evidence": [
+              "clause"
+            ]
+          },
+          {
+            "operator": "or",
+            "conditions": [
+              {
+                "field": "activity_type",
+                "operator": "in",
+                "value": [
+                  "Earthwork for excavation and filling including boring & drilling works.",
+                  "Piling works.",
+                  "All demolition works.",
+                  "Laying of sewer line, water line, drainage and electric cabling etc. by open trench system.",
+                  "Brick / masonry works.",
+                  "Operation of RMC batching plant.",
+                  "Major welding and gas -cutting operations",
+                  "Painting, polishing and varnishing works etc.",
+                  "Road construction activities and major repairs.",
+                  "Transfer, loading / unloading of dust generating materials like cement, fly -ash, bricks, sand, murram, pebbles, crushed stone etc. anywhere within / outside the project sites.",
+                  "Movement of vehicles carrying construction materials or C&D waste on unpaved roads."
+                ],
+                "evidence": [
+                  "activities",
+                  "unpaved"
+                ]
+              },
+              {
+                "operator": "and",
+                "conditions": [
+                  {
+                    "field": "activity_type",
+                    "operator": "in",
+                    "value": [
+                      "Cement, Plaster / other coatings",
+                      "Cutting / grinding and fixing of tiles, stones and other flooring materials"
+                    ],
+                    "evidence": [
+                      "activities"
+                    ]
+                  },
+                  {
+                    "field": "is_minor_indoor_repair",
+                    "operator": "eq",
+                    "value": false,
+                    "evidence": [
+                      "activities"
+                    ]
+                  }
+                ],
+                "evidence": [
+                  "activities"
+                ]
+              }
+            ],
+            "evidence": [
+              "activities",
+              "unpaved"
+            ]
+          }
+        ],
+        "evidence": [
+          "scope",
+          "clause",
+          "activities",
+          "unpaved"
+        ]
+      },
+      "requirement": {
+        "field": "activity_in_progress",
+        "operator": "eq",
+        "value": false,
+        "evidence": [
+          "clause"
+        ]
+      },
+      "required_action": "Suspend the Stage III listed restricted C&D activity at the linear public project under the additional Stage IV ban.",
+      "stage_evidence": "stage",
+      "continuation_evidence": "continuation",
+      "action_evidence": [
+        "clause",
+        "activities",
+        "unpaved"
+      ],
+      "evidence": {
+        "activities": {
+          "source_doc": "caqm-grap-schedule-2026-09-29",
+          "page": 11,
+          "quote": "Enforce strict restrictions on the following categories of dust generating/ air pollution causing construction and demolition ( C&D) activities in the entire NCR: • Earthwork for excavation and filling including boring & drilling works. • Piling works. • All demolition works. • Laying of sewer line, water line, drainage and electric cabling etc. by open trench system. • Brick / masonry works. • Operation of RMC batching plant. • Major welding and gas -cutting operations . Minor welding activities for MEP works (Mechanical, Electrical and Plumbing) to be, however, permitted. • Painting, polishing and varnishing works etc. • Cement, Plaster / other coatings, except for minor indoor repairs / maintenance. • Cutting / grinding and fixing of tiles, stones and other flooring materials, except for minor indoor repairs/maintenance. • Road construction activities and major repairs. Repairing of potholes shall, however, be permitted. • Transfer, loading / unloading of dust generating materials like cement, fly -ash, bricks, sand, murram, pebbles, crushed stone etc. anywhere within / outside the project sites."
+        },
+        "continuation": {
+          "source_doc": "caqm-grap-schedule-2026-09-29",
+          "page": 1,
+          "quote": "Restrictive actions undertaken as per previous stages shall be continued, in addition to the air pollution stage under which the restrictive actions are envisaged to be taken."
+        },
+        "scope": {
+          "source_doc": "caqm-grap-schedule-2026-09-29",
+          "page": 1,
+          "quote": "The GRAP for the entire NCR"
+        },
+        "stage": {
+          "source_doc": "caqm-grap-schedule-2026-09-29",
+          "page": 16,
+          "quote": "Stage IV – ‘Severe +’ Air Quality (DELHI AQI > 450)"
+        },
+        "unpaved": {
+          "source_doc": "caqm-grap-schedule-2026-09-29",
+          "page": 12,
+          "quote": "Movement of vehicles carrying construction materials or C&D waste on unpaved roads."
+        }
       }
     }
   ]

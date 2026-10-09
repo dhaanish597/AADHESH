@@ -9,7 +9,26 @@
       "sha256": "473e245b758c68be776b1d732be288abdbb5bd9084abf8fcdde9bcd3afcfa413",
       "byte_size": 767528,
       "local_path": "sources/caqm-grap-schedule-2026-09-29.pdf",
-      "pages_dir": "sources/pages/caqm-grap-schedule-2026-09-29"
+      "pages_dir": "sources/pages/caqm-grap-schedule-2026-09-29",
+      "page_sha256": {
+        "1": "134befb8582ad75dec4254b654510d348b1593c2492767a7e32806e926bfce00",
+        "2": "99a1c8872adf2b42e61e2848381b48320c2e615d12c3c3f781d8b1ef46449e4a",
+        "3": "41790058f3c1fb3ef13ce64c68a0f1f7629d14f9762e3ef8831e6e07c08ed22c",
+        "4": "c492b65babb53687fe3133b4b619b14e968fbe62f2f8a4862080ea1ecc7d27a2",
+        "5": "1c3090f74bc8fe5079a2f6e3e48ad26a93ff4b0d33ee97ebe309459a0371be21",
+        "6": "104a350be676ef3196b65e449cd22b8186f964a50972a2045dfdf380d8f3ada2",
+        "7": "1cfe7784326d5b1bf7c62905c1b502bf4b4a75ba16c1d8a139cd1b16b491b823",
+        "8": "667036896a39640b64b7b0d356e59e8d4528f28ffb6bb03de3100d436ec20bee",
+        "9": "b6b222e6e5b0f84425559e0fb18f158b6ed2df0a6a3bab6a7fbaeea560b9521a",
+        "10": "ebf80121f1630c4de5c748d87305bfa69719ebba4bb1c20f69124066eb587014",
+        "11": "fa5b4e6cdaacea391bd255fa13b7902d5c25fb47347300d40f219ac5a6b6370c",
+        "12": "626358fee524d8964642488aed9d93da758c55c86e59ca96ce25936d9fdc85d7",
+        "13": "7c6d0c6137f61ce8c6fad5267497321d6cebf54050dc33b5ff539938f311b1be",
+        "14": "1e5b07ea7f514078fca6411e119844a17e883171379707ed90a636dca39411e6",
+        "15": "95ff2c9a4f83f0524f81d1ae32663e07f6ea109848779e96725963cbf986db06",
+        "16": "b1aee2c58d4497910d10d3e28357c48e671dbfe9ff15d87914677f11e364e6cb",
+        "17": "656204be07414c0d950e69346539b4ef20644dc8ff3244a8b1ab0004117e0225"
+      }
     },
     {
       "doc_id": "caqm-grap-stage3-order-2026-01-16",
@@ -20,7 +39,18 @@
       "sha256": "358134752e712d7aa807bda8d5e4987d8c39ae747dc3c08db93c59d4ff8d0839",
       "byte_size": 8523939,
       "local_path": "sources/caqm-grap-stage3-order-2026-01-16.pdf",
-      "pages_dir": "sources/pages/caqm-grap-stage3-order-2026-01-16"
+      "pages_dir": "sources/pages/caqm-grap-stage3-order-2026-01-16",
+      "page_sha256": {
+        "1": "ea55a5c452478c24ea72a65c29f125d5304fb3135fd92e5941c11ed1c7183287",
+        "2": "c73c2ca699b9a1c74a07b10643ef93297fa620cd28fd1834e470ad040cbb3619",
+        "3": "d26f9ddf7c8f73f6f89986ec9d29efc1826cfb60afdb9dba5aab35dc92ae9cf3",
+        "4": "0a9b3cffb2d86c6407845fec835df3d8fd887fe5d959c9836add81bfcd67092b",
+        "5": "0f0cb89162af07514c78823a0c1c2c65a2fe13065e116913498c8f996919df5d",
+        "6": "e84bcdeb19e2d580dbbcde8db4166ba4e09a1a1fdfd5e5df89019f662922719a",
+        "7": "2116d4715bb3be4b3495803ca33fcf7a1a2290fa4e6c389b6177204be994b0c5",
+        "8": "fb9c2c613ceec286f20333ccde7a67dc34ed55273b2a222a6b44801589b3577d",
+        "9": "8c6ced0efb36e5c6db61873cf9e3791c0aad2f83dac3549602f7c504a4bb3d19"
+      }
     },
     {
       "doc_id": "caqm-grap-stage3-revocation-2026-01-22",
@@ -31,7 +61,17 @@
       "sha256": "e9317ed508bfb511f6694e330bacde8ceff6dcfe5d6703f9b96e53c6aef98996",
       "byte_size": 8355756,
       "local_path": "sources/caqm-grap-stage3-revocation-2026-01-22.pdf",
-      "pages_dir": "sources/pages/caqm-grap-stage3-revocation-2026-01-22"
+      "pages_dir": "sources/pages/caqm-grap-stage3-revocation-2026-01-22",
+      "page_sha256": {
+        "1": "4e5392d3fb022a24f0a37b48f2c3e586753c83cb657fe46ef158bc02969c0b7b",
+        "2": "407792cc979fdf49a83e0c69443d0ce9fbd7acc5a84e5de1dde376db64a85468",
+        "3": "847ee5388b283d9f2736e066617cfca1177b2c19250056bdd60db0b45e4e2174",
+        "4": "aeac87a1169b21f4ac2e1f50eac262543adf52c3df56f0bd324e364cfe5960f1",
+        "5": "64c593507832ceff1c2f190b24c23841b31e141780422fefe9b4623af300adc9",
+        "6": "29e1581554578e4dc972869d57d46b2f94a844688fd9adcd65d392d6d0f2c5e3",
+        "7": "1fd4fd8fbd244d535954b04d754988377477a52d591e55c4c31ceb1b009b9285",
+        "8": "0feb6ca989e9db9ff3a4baedd209f949f35c3a57c64e6bf594013a55893e5601"
+      }
     }
   ]
 }

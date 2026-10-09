@@ -21,7 +21,8 @@
           "sha256",
           "byte_size",
           "local_path",
-          "pages_dir"
+          "pages_dir",
+          "page_sha256"
         ],
         "properties": {
           "doc_id": {
@@ -54,6 +55,13 @@
           "pages_dir": {
             "type": "string",
             "description": "Directory of extracted per-page text files named p<N>.txt, relative to the corpus root."
+          },
+          "page_sha256": {
+            "type": "object",
+            "minProperties": 1,
+            "propertyNames": { "pattern": "^[1-9][0-9]*$" },
+            "additionalProperties": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+            "description": "Hashes of the recorded extracted text, with LF newlines. Prevents an edited page cache from forging a quotation while the PDF remains intact."
           },
           "supersedes": {
             "type": "array",

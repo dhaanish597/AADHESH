@@ -1,0 +1,10 @@
+{
+  "site_id": "example-unknown-dust-site",
+  "in_ncr": true,
+  "plot_size_sqm": 200,
+  "activity_type": "Piling works.",
+  "activity_in_progress": true,
+  "project_category": "Residential building",
+  "dust_mitigation_compliant": null,
+  "cd_waste_management_compliant": true
+}

@@ -1,0 +1,8 @@
+{
+  "station_id": "Rohini",
+  "parameter": "aqi",
+  "value": 420,
+  "observed_at": "2026-10-09T08:00:00+05:30",
+  "ingested_at": "2026-10-09T08:05:00+05:30",
+  "provenance": "synthetic"
+}

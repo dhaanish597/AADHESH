@@ -1,0 +1,13 @@
+{
+  "site_id": "example-stopped-piling-site",
+  "in_ncr": true,
+  "plot_size_sqm": 750,
+  "registered_on_state_portal": true,
+  "remote_monitoring_requirements_met": true,
+  "activity_type": "Piling works.",
+  "activity_in_progress": false,
+  "project_category": "Residential building",
+  "dust_mitigation_compliant": true,
+  "cd_waste_management_compliant": true,
+  "commission_directions_compliant": true
+}

@@ -33,7 +33,7 @@ from aadesh_cli.corpus import (
     main,
 )
 from aadesh_core.verification import verify_corpus
-from tests.support.corpus_builder import CorpusBuilder
+from tests.support.corpus_builder import RULE_CONTEXT, CorpusBuilder, rule_entry
 from tests.support.pdf_builder import make_pdf
 
 PAGE_ONE = "dust generating construction activities shall remain suspended"
@@ -58,7 +58,7 @@ def manifest_of(corpus: Path) -> list[dict]:
 @pytest.fixture
 def pdf(tmp_path: Path) -> Path:
     path = tmp_path / "downloaded.pdf"
-    path.write_bytes(make_pdf([PAGE_ONE, PAGE_TWO]))
+    path.write_bytes(make_pdf([PAGE_ONE + ". " + RULE_CONTEXT, PAGE_TWO]))
     return path
 
 
@@ -201,24 +201,22 @@ class TestAddEntry:
         return (
             CorpusBuilder(tmp_path / "corpus")
             .with_document(doc_id="order-a")
-            .with_page(doc_id="order-a", page=4, text=f"Clause 7. {PAGE_ONE}. Also, {PAGE_TWO}.")
+            .with_page(
+                doc_id="order-a",
+                page=4,
+                text=f"Clause 7. {PAGE_ONE}. Also, {PAGE_TWO}. {RULE_CONTEXT}",
+            )
+            .with_page(doc_id="order-a", page=9, text=PAGE_TWO)
+            .with_page(
+                doc_id="order-a",
+                page=5,
+                text="the Authority’s   direction\nissued under section 5",  # noqa: RUF001
+            )
             .build()
         )
 
     def obligation(self, **overrides) -> dict:
-        entry = {
-            "obligation_id": "grap3-dust-01",
-            "entity_types": ["construction_site"],
-            "triggers_at_stage": 3,
-            "label": "Suspend dust-generating activity",
-            "field": "has_dust_generating_activity",
-            "operator": "eq",
-            "value": True,
-            "source_doc": "order-a",
-            "page": 4,
-            "quote": PAGE_ONE,
-            "consequence": {"issues_parchi": True},
-        }
+        entry = rule_entry(obligation_id="grap3-dust-01", doc_id="order-a", page=4, quote=PAGE_ONE)
         entry.update(overrides)
         return entry
 
@@ -242,7 +240,6 @@ class TestAddEntry:
         assert read_json(corpus / "obligations" / "construction_site.json")["obligations"] == []
 
     def test_refuses_a_quote_that_lives_on_a_different_page_than_cited(self, corpus):
-        (corpus / "sources" / "pages" / "order-a" / "p9.txt").write_text(PAGE_TWO, encoding="utf-8")
         with pytest.raises(QuoteNotFound, match="page 9"):
             add_entry(
                 corpus_root=corpus,
@@ -252,12 +249,8 @@ class TestAddEntry:
 
     def test_accepts_a_quote_differing_only_in_typography(self, corpus):
         """Same leniency the verifier allows, so the two cannot drift apart."""
-        (corpus / "sources" / "pages" / "order-a" / "p5.txt").write_text(
-            # The curly apostrophe and the run of spaces are the point: they are what
-            # extraction introduces, and what the shared normalisation must fold away.
-            "the Authority’s   direction\nissued under section 5",  # noqa: RUF001
-            encoding="utf-8",
-        )
+        # The recorded page has a curly apostrophe and a run of spaces; both are
+        # extraction typography that the shared normalisation must fold away.
         add_entry(
             corpus_root=corpus,
             kind="obligation",
@@ -452,7 +445,7 @@ class TestAddStageBand:
             .with_page(
                 doc_id="order-a",
                 page=2,
-                text=f"Stage III shall apply when the AQI is between {PAGE_ONE}",
+                text="Test Stage III shall apply when the AQI is between 201-300",
             )
             .build()
         )
@@ -465,7 +458,7 @@ class TestAddStageBand:
             "aqi_upper": 300,
             "source_doc": "order-a",
             "page": 2,
-            "quote": "Stage III shall apply when the AQI is between",
+            "quote": "Test Stage III shall apply when the AQI is between 201-300",
         }
         entry.update(overrides)
         return entry
@@ -480,7 +473,7 @@ class TestAddStageBand:
             add_entry(
                 corpus_root=corpus,
                 kind="stage_band",
-                entry=self.band(quote="Stage III applies above AQI 200"),
+                entry=self.band(quote="Test Stage III applies for AQI ranging between 201-300"),
             )
         written = read_json(corpus / "stage_bands" / "grap_stage_bands.json")["stage_bands"]
         assert written == []
@@ -490,6 +483,14 @@ class TestAddStageBand:
         del broken["quote"]
         with pytest.raises(EntryRejected, match="quote"):
             add_entry(corpus_root=corpus, kind="stage_band", entry=broken)
+
+    def test_refuses_a_quote_that_omits_the_claimed_thresholds(self, corpus):
+        with pytest.raises(EntryRejected, match="quote does not support"):
+            add_entry(
+                corpus_root=corpus,
+                kind="stage_band",
+                entry=self.band(quote="Test Stage III shall apply when the AQI is between"),
+            )
 
 
 class TestCli:
@@ -517,19 +518,12 @@ class TestCli:
         payload = tmp_path / "entry.json"
         payload.write_text(
             json.dumps(
-                {
-                    "obligation_id": "grap3-dust-01",
-                    "entity_types": ["construction_site"],
-                    "triggers_at_stage": 3,
-                    "label": "Suspend dust-generating activity",
-                    "field": "has_dust_generating_activity",
-                    "operator": "eq",
-                    "value": True,
-                    "source_doc": "order-a",
-                    "page": 1,
-                    "quote": "dust-generating work must stop",
-                    "consequence": {"issues_parchi": True},
-                }
+                rule_entry(
+                    obligation_id="grap3-dust-01",
+                    doc_id="order-a",
+                    page=1,
+                    quote="dust-generating work must stop",
+                )
             ),
             encoding="utf-8",
         )

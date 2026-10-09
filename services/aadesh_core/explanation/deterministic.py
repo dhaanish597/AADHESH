@@ -11,9 +11,10 @@ from aadesh_core.domain import ObligationResult, ObligationSet, ObligationStatus
 from aadesh_core.explanation.contract import Explanation, ExplanationClaim, ExplanationContext
 
 _STATUS_SENTENCE = {
-    ObligationStatus.MET: "applies to this site",
-    ObligationStatus.NOT_MET: "does not apply to this site",
+    ObligationStatus.MET: "is satisfied by the recorded site facts",
+    ObligationStatus.NOT_MET: "is violated by the recorded site facts",
     ObligationStatus.UNKNOWN: "cannot be determined for this site",
+    ObligationStatus.NOT_APPLICABLE: "does not apply in this resolution",
 }
 
 
@@ -46,10 +47,14 @@ def explain_set(obligation_set: ObligationSet) -> Explanation:
     """The whole determination, including what could not be determined and what was excluded."""
     lines: list[str] = []
 
+    if obligation_set.replay_notice is not None:
+        lines.append(obligation_set.replay_notice)
+    lines.append(obligation_set.stage_status.reason)
+
     if obligation_set.stage is None:
         lines.append(
             "No GRAP stage is invoked by any CAQM order in the corpus, so no obligation "
-            "can be determined."
+            "is legally activated."
         )
     else:
         lines.append(

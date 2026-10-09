@@ -28,3 +28,10 @@ def core_root() -> Path:
 def shipped_corpus(repo_root: Path) -> Path:
     """The corpus actually committed to the repo, empty or not."""
     return repo_root / "corpus"
+
+
+@pytest.fixture(scope="session")
+def verified_corpus(shipped_corpus):
+    from aadesh_adapters.corpus.local_file import LocalFileCorpus
+
+    return LocalFileCorpus(shipped_corpus).snapshot()

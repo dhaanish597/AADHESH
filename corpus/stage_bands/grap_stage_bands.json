@@ -30,7 +30,8 @@
     {
       "stage": 4,
       "pollutant": "AQI",
-      "aqi_lower": 451,
+      "aqi_lower": 450,
+      "aqi_lower_inclusive": false,
       "aqi_upper": null,
       "source_doc": "caqm-grap-schedule-2026-09-29",
       "page": 16,

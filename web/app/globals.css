@@ -1,0 +1,396 @@
+/*
+  Aadesh — "Field Instrument".
+  Two registers, one product: a dark concrete supervisor console and a warm
+  stamped-paper worker parchi. They share IBM Plex Sans / Devanagari / Mono,
+  tabular numerals and spacing; they differ in material, so they are obviously
+  for different people.
+
+  Amber and red are STATE, never decoration. They appear on the state banner,
+  the armed Standing Order, the discrepancy line, and the acknowledgement stamp
+  — and only there.
+
+  Forbidden: neo-brutalism, glassmorphism, purple-to-blue gradient heroes,
+  soft pastel "friendly SaaS", emoji icons, dark-mode-with-neon-accents,
+  anything that reads like a crypto dashboard.
+*/
+
+@import "tailwindcss";
+
+/* --------------------------------------------------------------------------
+   Primitive tokens. These are the source of truth; @theme inline below mirrors
+   them into Tailwind utility classes so we can write `bg-concrete-900` and
+   `text-steel-100` without ever touching a JS config file.
+   -------------------------------------------------------------------------- */
+
+:root {
+  /* ---- console surfaces — cool greys, never purple ---- */
+  --concrete-900: #13161a;
+  --concrete-800: #1b1f25;
+  --concrete-700: #252a32;
+  --concrete-600: #343a44;
+  --rule:         #3f4651;
+
+  /* ---- console text ---- */
+  --steel-100: #eef1f4;
+  --steel-300: #c2c9d2;
+  --steel-500: #8b949e;
+
+  /* ---- state — the only saturated colours in the console ---- */
+  --halt:    #e5332a; /* work stopped */
+  --caution: #ffb000; /* stage invoked / standing order armed / discrepancy */
+  --clear:   #1f9d55; /* permitted / acknowledged */
+  --evidence:#4a7cf0; /* provenance, hashes, citations, focus ring */
+
+  /* ---- parchi — warm paper artifact ---- */
+  --paper:      #f6f1e4;
+  --paper-edge: #e3dac4;
+  --stamp-ink:  #1a1a18;
+  --stamp-red:  #b3261e;
+  --stamp-blue: #1f3a93;
+}
+
+/* --------------------------------------------------------------------------
+   Tailwind v4 CSS-first theme. Every design token becomes a utility class.
+   We deliberately expose NOTHING that maps to slate/zinc/gray defaults.
+   -------------------------------------------------------------------------- */
+
+@theme inline {
+  --color-concrete-900: var(--concrete-900);
+  --color-concrete-800: var(--concrete-800);
+  --color-concrete-700: var(--concrete-700);
+  --color-concrete-600: var(--concrete-600);
+  --color-rule:         var(--rule);
+
+  --color-steel-100: var(--steel-100);
+  --color-steel-300: var(--steel-300);
+  --color-steel-500: var(--steel-500);
+
+  --color-halt:    var(--halt);
+  --color-caution: var(--caution);
+  --color-clear:   var(--clear);
+  --color-evidence:var(--evidence);
+
+  --color-paper:      var(--paper);
+  --color-paper-edge: var(--paper-edge);
+  --color-stamp-ink:  var(--stamp-ink);
+  --color-stamp-red:  var(--stamp-red);
+  --color-stamp-blue: var(--stamp-blue);
+
+  --font-sans: var(--font-plex-sans);
+  --font-deva: var(--font-plex-deva);
+  --font-mono: var(--font-plex-mono);
+}
+
+/* --------------------------------------------------------------------------
+   Base. One surface per register: concrete for the console, paper for the
+   parchi. The parchi card carries its own paper background, so the console
+   routes stay on concrete and the worker route is the paper artifact.
+   -------------------------------------------------------------------------- */
+
+html,
+body {
+  background: var(--concrete-900);
+  color: var(--steel-100);
+  color-scheme: dark;
+}
+
+body {
+  font-feature-settings: "tnum" 1;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+* {
+  border-color: var(--rule);
+}
+
+/* Numbers never reflow as they tick. */
+.tabular {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1, "lnum" 1;
+}
+
+/* Devanagari needs more vertical room than Latin — matras sit above and below. */
+.font-deva {
+  line-height: 1.65;
+}
+
+/* Operational micro-labels: field names, not content. */
+.micro-label {
+  text-transform: uppercase;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  font-size: 0.6875rem;
+  line-height: 1;
+}
+
+/* Latin body line-height for contrast with Devanagari. */
+.font-sans {
+  line-height: 1.45;
+}
+
+/* --------------------------------------------------------------------------
+   Visible keyboard focus everywhere; never removed. Evidence blue so it is
+   obviously ours and not a browser default.
+   -------------------------------------------------------------------------- */
+
+:focus-visible {
+  outline: 2px solid var(--evidence);
+  outline-offset: 2px;
+}
+
+/* --------------------------------------------------------------------------
+   Motion. honoured in one global block. We also scope per-component brevity
+   so the crew board, the rupee counter and the acknowledge button can each
+   declare their own short transitions without fighting this blanket.
+   -------------------------------------------------------------------------- */
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* --------------------------------------------------------------------------
+   Named component classes — our equivalent of CampusEvac's .brutal-* family.
+   These are styled once here and reused by the React components. Components
+   may add Tailwind utility classes for layout, but colour / radius / shadow /
+   typography on branded surfaces come from these classes, not from inline
+   slate/zinc/gray utilities.
+   -------------------------------------------------------------------------- */
+
+/* ---- supervisor console surfaces ---- */
+
+.console-panel {
+  background: var(--concrete-800);
+  border: 1px solid var(--rule);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.02);
+}
+
+.console-panel-head {
+  border-bottom: 1px solid var(--rule);
+  padding: 0.75rem 1rem;
+}
+
+.state-banner {
+  font-family: var(--font-mono);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 1rem 1.25rem;
+}
+
+.state-bannerPermitted {
+  background: var(--concrete-800);
+  color: var(--steel-100);
+  border-top: 2px solid var(--clear);
+  border-bottom: 2px solid var(--clear);
+}
+
+.state-bannerStopped {
+  background: var(--halt);
+  color: var(--concrete-900);
+  border-top: 2px solid var(--concrete-900);
+  border-bottom: 2px solid var(--concrete-900);
+}
+
+.state-bannerCaution {
+  background: var(--concrete-800);
+  color: var(--caution);
+  border-top: 2px solid var(--caution);
+  border-bottom: 2px solid var(--caution);
+}
+
+.provenance-line {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  color: var(--steel-500);
+  letter-spacing: 0.01em;
+}
+
+.provenance-lineCaution {
+  color: var(--caution);
+}
+
+/* ---- obligation row ---- */
+
+.obligation-row {
+  border: 1px solid var(--rule);
+  background: var(--concrete-800);
+}
+
+.obligation-row-head {
+  padding: 0.85rem 1rem;
+  border-bottom: 1px solid var(--rule);
+}
+
+.obligation-row-body {
+  padding: 0.85rem 1rem;
+}
+
+.clause-id {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  color: var(--steel-500);
+}
+
+.clause-idStrong {
+  color: var(--steel-300);
+}
+
+/* ---- crew tile ---- */
+
+.crew-tile {
+  border: 1px solid var(--rule);
+  background: var(--concrete-700);
+}
+
+.crew-tileAcknowledged {
+  border-color: var(--clear);
+  background: color-mix(in oklab, var(--clear) 12%, var(--concrete-700));
+}
+
+.crew-tilePending {
+  border-color: var(--rule);
+  background: var(--concrete-700);
+}
+
+/* ---- parchi (worker slip) — warm paper ---- */
+
+.parchi-card {
+  background: var(--paper);
+  color: var(--stamp-ink);
+  border: 1px solid var(--paper-edge);
+  box-shadow:
+    0 1px 0 var(--paper-edge),
+    0 6px 18px -8px rgba(0, 0, 0, 0.25);
+  font-family: var(--font-sans);
+  line-height: 1.5;
+}
+
+.parchi-card-head {
+  font-family: var(--font-mono);
+  border-bottom: 1px dashed var(--paper-edge);
+}
+
+.serial {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.04em;
+}
+
+.stamp {
+  font-family: var(--font-mono);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--stamp-red);
+  border: 2px solid var(--stamp-red);
+  background: color-mix(in oklab, var(--stamp-red) 8%, var(--paper));
+}
+
+.stampBlue {
+  color: var(--stamp-blue);
+  border-color: var(--stamp-blue);
+  background: color-mix(in oklab, var(--stamp-blue) 8%, var(--paper));
+}
+
+.parchi-status-line {
+  font-family: var(--font-mono);
+  font-size: 1.35rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.2;
+}
+
+.parchi-body {
+  font-size: 1.05rem;
+  line-height: 1.6;
+}
+
+.parchi-bodyHi {
+  font-size: 1.125rem;
+  line-height: 1.6;
+}
+
+/* acknowledge button sits in the thumb zone on a 390×844 phone */
+.acknowledge-button {
+  min-height: 56px;
+  font-size: 1.05rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+/* ---- denial panel (Cedar) ---- */
+
+.denial-panel {
+  border: 1px solid var(--halt);
+  background: color-mix(in oklab, var(--halt) 10%, var(--concrete-800));
+  color: var(--steel-100);
+}
+
+.denial-panel-label {
+  font-family: var(--font-mono);
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--halt);
+}
+
+/* ---- utility: ink-on-concrete is the console's only body text colour ---- */
+
+.ink-on-concrete {
+  color: var(--steel-100);
+}
+
+.dim-on-concrete {
+  color: var(--steel-500);
+}
+
+.faint-on-concrete {
+  color: var(--steel-500);
+}
+
+/* ---- screen-reader only, used for the QR alt text and hidden labels ---- */
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border-width: 0;
+}
+
+/* ---- phone discipline: applied to the parchi route and the handoff wall ---- */
+
+.phone-surface {
+  overscroll-behavior: none;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+/* safe-area insets, applied to edge-anchored surfaces on the parchi route */
+.safe-top {
+  padding-top: max(1rem, env(safe-area-inset-top));
+}
+
+.safe-bottom {
+  padding-bottom: max(1.25rem, env(safe-area-inset-bottom));
+}
+
+.safe-left {
+  padding-left: max(0.75rem, env(safe-area-inset-left));
+}
+
+.safe-right {
+  padding-right: max(0.75rem, env(safe-area-inset-right));
+}

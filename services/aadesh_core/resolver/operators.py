@@ -1,44 +1,35 @@
-"""Comparison operators available to the rules corpus.
-
-Deliberately a small, closed set. A corpus is data, and data that can express arbitrary
-computation is a program -- at which point "rules as data" stops being true and the
-testability and traceability that justify it are gone.
-
-Every operator here is total with respect to *presence*: the resolver guarantees a fact
-exists and is known before any of these is called. They are not total with respect to
-*type*, and the resolver converts a TypeError into UNKNOWN rather than crashing.
-"""
+"""The comparison operators used by the corpus, without coercion of unknown or bad types."""
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from math import isfinite
 from typing import Any
 
 from aadesh_core.errors import CorpusIntegrityError
 
-OPERATORS: dict[str, Callable[[Any, Any], bool]] = {
-    "eq": lambda fact, expected: bool(fact == expected),
-    "neq": lambda fact, expected: bool(fact != expected),
-    "gt": lambda fact, expected: bool(fact > expected),
-    "gte": lambda fact, expected: bool(fact >= expected),
-    "lt": lambda fact, expected: bool(fact < expected),
-    "lte": lambda fact, expected: bool(fact <= expected),
-    "in": lambda fact, expected: bool(fact in expected),
-    "not_in": lambda fact, expected: bool(fact not in expected),
-}
+OPERATORS = frozenset({"eq", "gte", "in", "not_in"})
+
+
+def _same_type(fact: Any, expected: Any) -> bool:
+    if type(expected) in (int, float):
+        return type(fact) in (int, float) and isfinite(fact) and isfinite(expected)
+    return type(fact) is type(expected) and isinstance(expected, str | bool)
 
 
 def apply_operator(operator: str, fact: Any, expected: Any) -> bool:
-    """Apply `operator`, raising CorpusIntegrityError for an unknown one.
-
-    An unrecognised operator is an authoring bug in the corpus, not a runtime condition to
-    degrade around. Guessing what was meant is the opposite of what Aadesh is for.
-    """
-    try:
-        fn = OPERATORS[operator]
-    except KeyError:
-        raise CorpusIntegrityError(
-            f"Unknown operator {operator!r}. Permitted operators: "
-            f"{', '.join(sorted(OPERATORS))}. Fix the corpus entry."
-        ) from None
-    return fn(fact, expected)
+    if operator not in OPERATORS:
+        raise CorpusIntegrityError(f"Unknown operator {operator!r}")
+    if operator in ("in", "not_in"):
+        if not isinstance(expected, tuple | list) or not expected:
+            raise TypeError("Membership requires a non-empty list of known values")
+        if not all(_same_type(fact, item) for item in expected):
+            raise TypeError("Membership operands must have matching scalar types")
+        present = fact in expected
+        return present if operator == "in" else not present
+    if not _same_type(fact, expected):
+        raise TypeError("Comparison operands must have matching scalar types")
+    if operator == "gte":
+        if type(expected) not in (int, float):
+            raise TypeError("gte requires finite numbers")
+        return fact >= expected
+    return fact == expected

@@ -15,10 +15,12 @@ from aadesh_core.domain import (
     Citation,
     InvokedStage,
     Obligation,
+    Predicate,
     Provenance,
     SiteProfile,
     SourceState,
     StationReading,
+    VerifiedCorpus,
 )
 from aadesh_core.domain.enums import (
     StageMatch,
@@ -46,22 +48,39 @@ def citation(**over: Any) -> Citation:
             "source_doc": "test-order",
             "page": 4,
             "quote": "verbatim text from a hashed source document",
+            "source_hash": "a" * 64,
             **over,
         }
     )
 
 
 def obligation(**over: Any) -> Obligation:
+    field = over.pop("field", "has_dust_generating_activity")
+    operator = over.pop("operator", "eq")
+    value = over.pop("value", True)
+    stage = over.get("triggers_at_stage", 3)
+    primary = over.pop("citation", citation(quote=f"Test requirement values: {value!r}"))
     return Obligation(
         **{
             "obligation_id": "test-ob-01",
             "entity_types": ("construction_site",),
             "triggers_at_stage": 3,
             "label": "Test obligation",
-            "field": "has_dust_generating_activity",
-            "operator": "eq",
-            "value": True,
-            "citation": citation(),
+            "applicability": Predicate("eq", ("clause",), field="in_ncr", value=True),
+            "requirement": Predicate(
+                operator,
+                ("clause",),
+                field=field,
+                value=tuple(value) if isinstance(value, list) else value,
+            ),
+            "required_action": "Satisfy the test requirement",
+            "citation": primary,
+            "evidence": (
+                ("context", citation(quote=f"Test Stage {stage}; previous stages continue.")),
+            ),
+            "stage_evidence": "context",
+            "continuation_evidence": "context",
+            "action_evidence": ("clause",),
             "issues_parchi": True,
             "worker_entitlement_ref": None,
             "source_state": SourceState.VERIFIED,
@@ -71,12 +90,13 @@ def obligation(**over: Any) -> Obligation:
 
 
 def site(**over: Any) -> SiteProfile:
+    facts = over.pop("facts", {"has_dust_generating_activity": True})
     return SiteProfile(
         **{
             "site_id": "site-001",
             "entity_type": "construction_site",
             "nearest_station_id": "station-001",
-            "facts": {"has_dust_generating_activity": True},
+            "facts": {"in_ncr": True, **facts},
             **over,
         }
     )
@@ -89,8 +109,37 @@ def invoked_stage(**over: Any) -> InvokedStage:
             "order_doc_id": "test-order",
             "order_sha256": "a" * 64,
             "invoked_at": FIXED_NOW,
+            "citation": citation(quote=f"Test authority invokes Stage {over.get('stage', 3)}."),
+            "source_state": SourceState.VERIFIED,
             **over,
         }
+    )
+
+
+def snapshot(*, obligations=(), stage=None, bands=()) -> VerifiedCorpus:
+    """Test-only proof double; never written to or loaded by the authoritative corpus."""
+    receipts = {
+        c
+        for rule in obligations
+        if rule.source_state is SourceState.VERIFIED
+        for c in rule.citations
+        if c is not None
+    }
+    receipts.update(band.citation for band in bands if band.source_state is SourceState.VERIFIED)
+    if stage is not None and stage.source_state is SourceState.VERIFIED:
+        receipts.update(c for c in (stage.citation, stage.revocation_citation) if c is not None)
+    return VerifiedCorpus(
+        obligations=tuple(obligations),
+        stage_bands=tuple(bands),
+        invocations=(() if stage is None else (stage,)),
+        proved_citations=frozenset(receipts),
+        proved_obligations=frozenset(
+            rule for rule in obligations if rule.source_state is SourceState.VERIFIED
+        ),
+        proved_invocations=frozenset(() if stage is None else (stage,)),
+        proved_stage_bands=frozenset(
+            band for band in bands if band.source_state is SourceState.VERIFIED
+        ),
     )
 
 

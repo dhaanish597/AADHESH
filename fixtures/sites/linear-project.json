@@ -1,0 +1,13 @@
+{
+  "site_id": "example-linear-project",
+  "in_ncr": true,
+  "plot_size_sqm": 750,
+  "registered_on_state_portal": true,
+  "remote_monitoring_requirements_met": true,
+  "activity_type": "Piling works.",
+  "activity_in_progress": true,
+  "project_category": "Linear public projects",
+  "dust_mitigation_compliant": true,
+  "cd_waste_management_compliant": true,
+  "commission_directions_compliant": true
+}

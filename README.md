@@ -37,40 +37,64 @@ Outputs are phrased as *"this clause applies to your profile"* — never *"you a
 
 ---
 
-## Current status — foundation only
+## Current status
 
-This repository currently contains the engineering foundation and one vertical slice that
-proves the architecture end to end. It is **not** the finished application. See
-[the foundation spec](docs/superpowers/specs/2026-10-08-aadesh-v2-foundation-design.md) for what
-is deliberately deferred.
+The deterministic construction obligation engine and local JSON interface are implemented.
+The verified corpus contains **3 official CAQM documents, 8 construction obligations and 4
+stage bands**. `make verify` passes **55 citation checks**, including the supporting conditions
+and historical invocation/revocation evidence. No entitlement amount is encoded.
 
-**`make verify` currently fails, on purpose.** See [below](#make-verify--the-centrepiece).
+There is **no verified current official invocation**. January 2026 Stage III is available only
+through explicit historical scenario replay. AQI observations cannot activate a legal stage.
+See the [engine API, rule audit and limitations](docs/obligation-engine.md), and the
+[initial source audit](docs/corpus-audit.md).
+
+AQI ingestion, deployed workflows, Standing Orders, worker Parchis, model integrations and the
+frontend remain subsequent work. The foundation's test slice is not a finished application.
 
 ## Quickstart
 
 ```bash
 make setup           # uv venv + dev deps. No Docker, no AWS account, no network beyond PyPI.
 cp .env.example .env
-make test            # pure pytest against in-memory fakes, ~seconds
-make verify          # citation proof. Exits non-zero until the corpus is sourced.
-make corpus-help     # how to add a source document, once you have the real order
+make test            # offline tests, real corpus checks and isolated test doubles
+make verify          # re-prove the populated authoritative corpus
+make resolve ARGS="--site fixtures/sites/piling-site.json"
+make corpus-help     # how to add another authoritative source or cited rule
+make api             # local JSON API for the frontend (http://127.0.0.1:8787)
+make web             # Next.js frontend (http://localhost:3000), in a second shell
 ```
 
 | Target | What it does | Needs Docker? |
 |---|---|---|
-| `make test` | default suite, fakes only | no |
+| `make test` | default offline suite | no |
 | `make verify` | re-prove every citation against hashed source bytes | no |
 | `make verify-tamper` | flip one byte in a scratch copy, prove the check catches it | no |
+| `make resolve` | deterministic site resolution, JSON output | no |
 | `make corpus` | the ONLY sanctioned way to add a document or a cited clause | no |
+| `make api` | local JSON API over the deterministic core, for the frontend | no |
+| `make web` | Next.js + TypeScript + Tailwind console over that API | no |
 | `make test-integration` | same core against LocalStack | yes |
 | `make verify-index` | additionally assert the OpenSearch index agrees | yes |
 
 > `make verify --tamper` is **not** valid GNU make syntax — make parses `--tamper` as one of its
 > own options and aborts. Use `make verify-tamper`.
 
+## Frontend
+
+The operational console lives in [`web/`](web/README.md): a Next.js + TypeScript + Tailwind
+app whose supervisor screen answers *"what is happening at my site and what do I need to
+do?"*. It holds no rules of its own — it calls the local JSON API (`make api`), which is the
+same deterministic core the CLI and `make verify` use. It shows the historical Stage III
+replay labelled as a replay, the station reading labelled as a synthetic placeholder, and
+**no rupee amount**, because the verified corpus establishes none.
+
 ---
 
 ## Architecture
+
+The resolver and corpus verification run locally today. The cloud and product integrations
+below describe the planned architecture.
 
 ```
 real data → rules-as-data → deterministic resolver → authorization
@@ -107,21 +131,21 @@ outside the enforcement path and may only rephrase an already-computed result.
 
 **GRAP stage thresholds.** Mapping an AQI reading to a stage requires GRAP's threshold bands,
 and those bands live *in the CAQM order*. They are therefore cited corpus data, not constants in
-Python. Until a real order is hashed, the implied stage is `UNKNOWN`. A guard test fails the
+Python. A missing or unproved band cannot establish an implied stage. A guard test fails the
 build if an AQI-range integer literal appears in the domain or resolver.
 
 A stage is **invoked by an order**, not computed by arithmetic. CAQM can invoke pre-emptively on
 a forecast, or hold off. Aadesh tracks invoked and implied separately and says so when they
 diverge.
 
-**Entitlement amounts.** `entitlement.amount` is `null` unless a figure appears in a hashed
-source document carrying its own citation. When null, Aadesh reports **displaced worker-days**,
-which is always provable. The headline counter renders rupees only if every contributing clause
-has a cited amount.
+**Entitlement amounts.** The corpus contains no monetary entitlement. The resolver reports
+operational compliance outcomes and clause counts. It cannot generate an amount from worker
+counts or application logic, and it makes no measured-emissions claim.
 
 ### Three error-handling rules
 
-1. **Tri-state, never inferred false.** A missing site fact yields `UNKNOWN`, never `NOT_MET`.
+1. **Unknown remains unknown.** A missing fact needed to decide the result yields `UNKNOWN`.
+   Applicability is separate from compliance: `MET`, `NOT_MET`, `UNKNOWN`, `NOT_APPLICABLE`.
 2. **Unsourced is a loud state, not an empty one.** A corpus entry whose quote is not verified
    against hashed bytes is excluded from resolution *and reported*. An incomplete corpus
    degrades honestly instead of silently.
@@ -137,8 +161,9 @@ silently presented as a measured one.
 ## `make verify` — the centrepiece
 
 `make verify` re-hashes every stored source document against the manifest, then re-checks that
-every cited quote appears **verbatim** in the page it claims. Zero infrastructure, seconds to
-run on a clean machine.
+every cited quote appears **verbatim** in the page it claims. It also checks the recorded hash
+of the extracted page, all supporting rule citations, evidence references and legal literals.
+Zero infrastructure, seconds to run on a clean machine.
 
 It checks obligations, entitlements, stage bands **and the invoked stage** — the last of which
 is the fact that decides whether any obligation applies at all. A quote is only counted as
@@ -147,16 +172,16 @@ cache of what a document said, and if the bytes have changed, the cache is evide
 nothing. Without that rule a tampered source would keep enforcing, which is precisely what
 verification exists to prevent.
 
-**It currently exits non-zero because the corpus has zero verified citations.** That is the
-expected Day 1 state and the gate working as designed — not a defect. A hash check that has
-never failed proves only that you did not delete your files.
+**It currently passes: 3 source documents and 55 citation checks.** Missing or tampered
+evidence refuses resolution; setting a rule's verification flag cannot manufacture proof.
 
 `make verify-tamper` flips one byte in a scratch copy and **expects verification to fail**; it
 reports `FAILED (expected)` and exits non-zero to show the detection working. If tampered bytes
 ever *pass*, it exits with a distinct code and a louder message.
 
-Nothing in `corpus/` is populated until the authoritative CAQM order is located, downloaded
-from its official domain, SHA-256 hashed, and quoted verbatim. See [corpus/README.md](corpus/README.md).
+Every source in `corpus/` was downloaded from the official CAQM domain, SHA-256 hashed and
+quoted from its recorded page text. The source PDFs remain unchanged. See
+[corpus/README.md](corpus/README.md).
 
 The ingestion CLI is the only door in, and it refuses a paraphrase:
 
@@ -233,8 +258,11 @@ enforce and harder to quietly skip.
 **It is NCR-only, because GRAP is.** The engine is a rules corpus, so another city is another
 corpus.
 
-**No authoritative CAQM source is encoded yet.** This is the top blocker. Until it is resolved,
-`make verify` fails and no obligation can enter resolution.
+**Current invocation evidence is absent.** The corpus proves the January invocation was
+revoked. It cannot establish a current stage without another verified order. Historical replay
+uses the September 2026 schedule as a scenario, because the November 2025 schedule referenced
+by the January orders is absent. The page 12 permissions also have an explicitly documented
+ambiguity; affected decisions remain `UNKNOWN`.
 
 ## Licence and attributions
 

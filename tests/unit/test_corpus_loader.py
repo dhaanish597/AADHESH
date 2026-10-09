@@ -125,5 +125,5 @@ def test_unknown_entity_type_is_rejected_by_schema(tmp_path):
 def test_verification_report_is_exposed_for_reporting(tmp_path):
     corpus = LocalFileCorpus(_corpus(tmp_path))
     report = corpus.verification_report()
-    assert report.citations_verified == 1
+    assert report.citations_verified == 2  # Primary clause and its stage/continuation context.
     assert report.documents_verified == 1

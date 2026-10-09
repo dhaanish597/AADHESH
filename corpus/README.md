@@ -1,7 +1,12 @@
 # Corpus — rules as data, with provenance
 
-**Every file in this directory is intentionally empty.** That is the correct Day 1 state and
-`make verify` exits non-zero because of it.
+The corpus contains **3 official CAQM source documents, 8 construction obligations, 4 stage
+bands and the January 2026 invocation/revocation**. `make verify` re-proves 55 citations. The
+entitlement list is empty. There is no verified current invocation.
+
+See the [deterministic rule audit and API](../docs/obligation-engine.md) for every condition,
+exception and unresolved wording, and the [initial source audit](../docs/corpus-audit.md) for
+the official URLs and original primary citations.
 
 ## The rule that governs this directory
 
@@ -12,16 +17,16 @@ GRAP has been revised repeatedly, with orders amending earlier orders. For every
 intend to encode, you must locate the **current** CAQM order, download it from the official
 domain, hash the bytes, and encode only from the text you are holding.
 
-**If you cannot establish which order is current for a measure, drop that measure.** Ten certain
-obligations beat twenty-five uncertain ones. A confidently wrong citation is worse than no
-citation, because provenance has been loudly advertised.
+Do not treat historical or uncertain evidence as current. Preserve cited clauses and model
+their conditions faithfully; unresolved wording must remain explicitly unknown. The engine
+audit corrects the initial one-fact approximations without deleting any of the eight rules.
 
 ## Layout
 
 ```
 corpus/
 ├── sources/
-│   ├── manifest.json             Provenance: doc_id, sha256, official URL, retrieved_at
+│   ├── manifest.json             Provenance: doc_id, PDF/page hashes, official URL, retrieved_at
 │   ├── <doc_id>.pdf              The EXACT downloaded bytes. Committed on purpose: it is
 │   │                             what makes `make verify` reproducible for a judge.
 │   └── pages/<doc_id>/p<N>.txt   Extracted per-page text. Quotes are checked against these.
@@ -38,8 +43,9 @@ verified. Both are refused.
 
 ## Adding a document
 
-**Do not hand-edit this directory.** Use the ingestion CLI, which does steps 1-4 for you and
-then *refuses* a quote that is not on the page it claims. `make corpus-help` lists everything.
+Use the ingestion CLI for new documents and clauses; it refuses a quote that is not on the
+page it claims. `make corpus-help` lists the commands. Model corrections to existing rules
+must preserve the original evidence, add tests and be documented in the engine audit.
 
 ```bash
 # 1-4. hash the bytes you downloaded, store them, extract page text. One command.
@@ -97,7 +103,8 @@ corpus, which is the opposite of failing safe.
 
 ## Why `quote` must be verbatim
 
-`make verify` re-reads the extracted page text and asserts the `quote` string appears in it.
+`make verify` checks the PDF and extracted-page hashes and asserts the `quote` string appears
+in that recorded page text. Supporting quotes for conditions and exceptions are verified too.
 A paraphrase — however faithful — fails. This is deliberate: it is the mechanism that stops
 good intentions from degrading into remembered law under deadline pressure.
 
@@ -110,11 +117,24 @@ A stage is invoked by an order, not computed by arithmetic. CAQM can invoke pre-
 forecast, or hold off. When invoked and implied diverge, Aadesh says so explicitly rather than
 quietly preferring one.
 
-Until `stage_bands` is populated from a hashed source, the implied stage is `UNKNOWN`.
+The four bands come from the September 2026 schedule. Stage IV's strict lower boundary is
+explicit data (`aqi_lower_inclusive: false`); thresholds and inclusivity must agree with their
+quotes. No observation creates an official invocation.
+
+January Stage III was revoked on January 22 and is available only in explicit replay mode.
+The historical orders refer to a different schedule revision, so that replay is labelled a
+scenario using the available rules, not proof of the obligations in force in January.
+
+## Rule representation
+
+Each obligation separates factual `applicability` from its compliance `requirement`. Predicate
+trees use only `eq`, `gte`, `in`, `not_in`, `and`, `or`; every node names supporting evidence.
+Stage activation, continuation and the required action also name evidence. An original primary
+citation remains attached to every row. The small fact vocabulary is listed in the
+[engine documentation](../docs/obligation-engine.md#scope-of-a-site-profile).
 
 ## Amounts
 
-`entitlement.amount` is `null` unless a specific figure appears in a hashed source document,
-and the figure carries its own independent citation. When it is null, Aadesh reports **displaced
-worker-days**, which is always provable. Never populate an amount to make a demo number look
-better.
+No held source establishes an entitlement amount, so none is encoded. The resolver produces
+operational compliance outcomes only. Worker-count arithmetic cannot create a legal obligation
+or a monetary figure, and clause counts are not measurements of pollution prevented.

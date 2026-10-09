@@ -16,12 +16,20 @@ from __future__ import annotations
 
 from typing import Protocol, runtime_checkable
 
-from aadesh_core.domain import Entitlement, InvokedStage, Obligation, SourceDocument, StageBand
+from aadesh_core.domain import (
+    Entitlement,
+    InvokedStage,
+    Obligation,
+    SourceDocument,
+    StageBand,
+    VerifiedCorpus,
+)
 from aadesh_core.verification import VerificationReport
 
 
 @runtime_checkable
 class RulesCorpus(Protocol):
+    def snapshot(self) -> VerifiedCorpus: ...
     def obligations(self) -> tuple[Obligation, ...]: ...
     def entitlements(self) -> tuple[Entitlement, ...]: ...
     def stage_bands(self) -> tuple[StageBand, ...]: ...
@@ -40,8 +48,9 @@ class InvokedStageSource(Protocol):
         """The stage CURRENTLY in force, or None if none is.
 
         None means "no order in the corpus invokes a stage" (or the only invocation on record
-        has been revoked). The resolver treats that as UNKNOWN rather than as "nothing
-        applies". A revoked invocation is never returned here.
+        has been revoked). Stage-triggered clauses are NOT_APPLICABLE for this resolution;
+        this does not assert knowledge of orders outside the corpus. A revoked invocation
+        is never returned here.
         """
         ...
 

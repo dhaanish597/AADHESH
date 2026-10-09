@@ -14,7 +14,12 @@
     },
     "aqi_lower": {
       "type": "number",
-      "description": "Inclusive lower bound, as stated in the cited source."
+      "description": "Lower bound copied from the cited source. Inclusivity is explicit when the source uses a strict comparison."
+    },
+    "aqi_lower_inclusive": {
+      "type": "boolean",
+      "default": true,
+      "description": "False for a strictly greater-than lower bound; true for the closed ranges."
     },
     "aqi_upper": {
       "type": ["number", "null"],

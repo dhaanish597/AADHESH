@@ -61,7 +61,7 @@ def test_the_unmodified_scratch_copy_verifies_clean(corpus: Path):
     report = verify_corpus(corpus)
     assert not report.has_failures
     assert report.documents_verified == 3
-    assert report.citations_verified == 14
+    assert report.citations_verified == 55  # Original citations plus all contextual conditions.
     assert LocalFileCorpus(corpus).invoked_stage() is None  # revoked, not current
 
 

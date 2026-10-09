@@ -15,7 +15,7 @@ export PYTHONPATH := services
 
 .DEFAULT_GOAL := help
 .PHONY: help setup test test-all test-integration verify verify-tamper verify-index \
-        corpus corpus-help lint fmt dev clean check
+        corpus corpus-help resolve lint fmt dev api web clean check
 
 help: ## Show available targets
 	@grep -hE '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) \
@@ -29,7 +29,7 @@ setup: ## Create the venv and install dev dependencies (no Docker, no AWS)
 
 # --- tests -----------------------------------------------------------------
 
-test: ## Run the default suite: pure pytest, fakes only, no Docker (~seconds)
+test: ## Run offline pytest: deterministic core, verified corpus and test doubles, no Docker
 	$(PY) -m pytest -m "not integration and not requires_index"
 
 test-integration: ## Run the same core against LocalStack (requires Docker)
@@ -65,6 +65,9 @@ corpus-help: ## Show the corpus CLI subcommands
 	@echo '  Every quote is checked VERBATIM against the page it cites, using the same'
 	@echo '  normalisation `make verify` uses. A paraphrase is refused at the door.'
 
+resolve: ## Resolve a site: make resolve ARGS="--site fixtures/sites/piling-site.json"
+	$(PY) -m aadesh_cli.resolve $(ARGS)
+
 # NOTE ON SYNTAX: `make verify --tamper` is NOT valid GNU make — make parses
 # `--tamper` as one of its own options and aborts. Use `make verify-tamper`,
 # or call the CLI directly: `python -m aadesh_cli.verify --tamper`.
@@ -88,8 +91,16 @@ check: lint test ## What CI runs: lint, tests, then the citation gate
 
 # --- dev -------------------------------------------------------------------
 
-dev: ## Run the local API (same core as Lambda) plus the Next.js dev server
-	@echo "Not wired yet - see docs/superpowers/specs/2026-10-08-aadesh-v2-foundation-design.md section 11"
+api: ## Run the local JSON API over the deterministic core (port 8787)
+	$(PY) -m aadesh_web.server --port 8787
+
+web: ## Run the Next.js frontend (port 3000); needs `make api` in another shell
+	cd web && npm install && npm run dev
+
+dev: ## How to run both processes
+	@echo "Run these in two shells:"
+	@echo "  1) make api     # Aadesh JSON API on http://127.0.0.1:8787"
+	@echo "  2) make web     # Next.js frontend on http://localhost:3000"
 
 clean: ## Remove caches and scratch artefacts
 	rm -rf .pytest_cache .ruff_cache .coverage htmlcov corpus/sources/.tamper-scratch

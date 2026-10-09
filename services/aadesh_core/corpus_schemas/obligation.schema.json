@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://aadesh.local/schemas/obligation.schema.json",
-  "title": "GRAP obligation (rules-as-data)",
-  "description": "One obligation that a GRAP stage places on one entity type. Every field here is either structural or copied VERBATIM from a hashed source document. Nothing is paraphrased, summarised, or recalled from memory.",
+  "title": "Construction obligation: applicability and compliance with cited predicates",
+  "description": "Every decision node and action names supporting evidence. The original primary citation is preserved.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -10,13 +10,17 @@
     "entity_types",
     "triggers_at_stage",
     "label",
-    "field",
-    "operator",
-    "value",
     "source_doc",
     "page",
     "quote",
-    "consequence"
+    "consequence",
+    "applicability",
+    "requirement",
+    "required_action",
+    "evidence",
+    "stage_evidence",
+    "continuation_evidence",
+    "action_evidence"
   ],
   "properties": {
     "obligation_id": {
@@ -28,7 +32,9 @@
       "type": "array",
       "minItems": 1,
       "uniqueItems": true,
-      "items": { "const": "construction_site" },
+      "items": {
+        "const": "construction_site"
+      },
       "description": "Scope is deliberately ONE entity type. Adding another is out of scope."
     },
     "triggers_at_stage": {
@@ -40,19 +46,6 @@
       "type": "string",
       "minLength": 1,
       "description": "Short human label. May be editorial, because it is never the legal basis for anything. The quote is."
-    },
-    "field": {
-      "type": "string",
-      "minLength": 1,
-      "description": "Name of the site-profile fact this obligation keys on, e.g. has_dust_generating_activity. If the fact is absent from the profile, the resolver MUST return UNKNOWN."
-    },
-    "operator": {
-      "type": "string",
-      "enum": ["eq", "neq", "gt", "gte", "lt", "lte", "in", "not_in"]
-    },
-    "value": {
-      "description": "Value compared against the site fact. Type must suit the operator.",
-      "type": ["string", "number", "boolean", "array"]
     },
     "source_doc": {
       "type": "string",
@@ -72,7 +65,9 @@
     "consequence": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["issues_parchi"],
+      "required": [
+        "issues_parchi"
+      ],
       "properties": {
         "issues_parchi": {
           "type": "boolean",
@@ -83,6 +78,239 @@
           "description": "entitlement_id this obligation routes a displaced worker to. Optional: an obligation may halt work without a separately cited entitlement."
         }
       }
+    },
+    "applicability": {
+      "$ref": "#/$defs/predicate"
+    },
+    "requirement": {
+      "$ref": "#/$defs/predicate"
+    },
+    "required_action": {
+      "type": "string",
+      "minLength": 1
+    },
+    "evidence": {
+      "type": "object",
+      "minProperties": 1,
+      "propertyNames": {
+        "pattern": "^(?!clause$)[a-z][a-z_]*$"
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/citation"
+      }
+    },
+    "stage_evidence": {
+      "type": "string",
+      "minLength": 1
+    },
+    "continuation_evidence": {
+      "type": "string",
+      "minLength": 1
+    },
+    "action_evidence": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "clarification_when": {
+      "$ref": "#/$defs/predicate"
+    },
+    "clarification": {
+      "type": "string",
+      "minLength": 1
+    }
+  },
+  "dependentRequired": {
+    "clarification_when": [
+      "clarification"
+    ],
+    "clarification": [
+      "clarification_when"
+    ]
+  },
+  "$defs": {
+    "citation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "source_doc",
+        "page",
+        "quote"
+      ],
+      "properties": {
+        "source_doc": {
+          "type": "string",
+          "minLength": 1
+        },
+        "page": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "quote": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "predicate": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "field",
+            "operator",
+            "value",
+            "evidence"
+          ],
+          "properties": {
+            "field": {
+              "enum": [
+                "in_ncr",
+                "plot_size_sqm",
+                "registered_on_state_portal",
+                "remote_monitoring_requirements_met",
+                "activity_type",
+                "activity_in_progress",
+                "is_minor_indoor_repair",
+                "project_category",
+                "ancillary_to_category",
+                "dust_mitigation_compliant",
+                "cd_waste_management_compliant",
+                "commission_directions_compliant"
+              ]
+            },
+            "operator": {
+              "enum": [
+                "eq",
+                "gte",
+                "in",
+                "not_in"
+              ]
+            },
+            "value": {
+              "type": [
+                "string",
+                "number",
+                "boolean",
+                "array"
+              ]
+            },
+            "evidence": {
+              "type": "array",
+              "minItems": 1,
+              "uniqueItems": true,
+              "items": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          },
+          "allOf": [
+            {
+              "if": {
+                "properties": {
+                  "operator": {
+                    "const": "gte"
+                  }
+                }
+              },
+              "then": {
+                "properties": {
+                  "value": {
+                    "type": "number"
+                  }
+                }
+              }
+            },
+            {
+              "if": {
+                "properties": {
+                  "operator": {
+                    "enum": [
+                      "in",
+                      "not_in"
+                    ]
+                  }
+                }
+              },
+              "then": {
+                "properties": {
+                  "value": {
+                    "type": "array",
+                    "minItems": 1,
+                    "uniqueItems": true,
+                    "items": {
+                      "type": [
+                        "string",
+                        "number",
+                        "boolean"
+                      ]
+                    }
+                  }
+                }
+              }
+            },
+            {
+              "if": {
+                "properties": {
+                  "operator": {
+                    "const": "eq"
+                  }
+                }
+              },
+              "then": {
+                "properties": {
+                  "value": {
+                    "type": [
+                      "string",
+                      "number",
+                      "boolean"
+                    ]
+                  }
+                }
+              }
+            }
+          ]
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "operator",
+            "conditions",
+            "evidence"
+          ],
+          "properties": {
+            "operator": {
+              "enum": [
+                "and",
+                "or"
+              ]
+            },
+            "conditions": {
+              "type": "array",
+              "minItems": 2,
+              "items": {
+                "$ref": "#/$defs/predicate"
+              }
+            },
+            "evidence": {
+              "type": "array",
+              "minItems": 1,
+              "uniqueItems": true,
+              "items": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          }
+        }
+      ]
     }
   }
 }

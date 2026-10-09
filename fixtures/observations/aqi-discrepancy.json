@@ -1,0 +1,8 @@
+{
+  "station_id": "example-station",
+  "parameter": "aqi",
+  "value": 420,
+  "observed_at": "2026-10-08T09:00:00+05:30",
+  "ingested_at": "2026-10-08T09:00:00+05:30",
+  "provenance": "synthetic"
+}

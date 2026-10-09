@@ -11,16 +11,23 @@ corpus look like a clean bill of health.
 
 from __future__ import annotations
 
-from aadesh_core.domain import Obligation, SourceState
+from aadesh_core.domain import Obligation, Predicate, SourceState
 from aadesh_core.resolver import resolve_obligations
-from tests.support.builders import FIXED_NOW, citation, invoked_stage, obligation, reading, site
+from tests.support.builders import (
+    FIXED_NOW,
+    citation,
+    invoked_stage,
+    obligation,
+    reading,
+    site,
+    snapshot,
+)
 
 
 def _resolve(obligations):
     return resolve_obligations(
         site=site(),
-        stage=invoked_stage(),
-        obligations=obligations,
+        corpus=snapshot(stage=invoked_stage(), obligations=obligations),
         reading=reading(),
         now=FIXED_NOW,
     )
@@ -48,10 +55,14 @@ def test_source_state_defaults_to_unsourced():
         entity_types=("construction_site",),
         triggers_at_stage=3,
         label="Built without stating source_state",
-        field="has_dust_generating_activity",
-        operator="eq",
-        value=True,
+        applicability=Predicate("eq", ("clause",), field="in_ncr", value=True),
+        requirement=Predicate("eq", ("clause",), field="has_dust_generating_activity", value=True),
+        required_action="Satisfy test requirement",
         citation=citation(),
+        evidence=(("context", citation(quote="Test Stage 3; previous stages continue.")),),
+        stage_evidence="context",
+        continuation_evidence="context",
+        action_evidence=("clause",),
         issues_parchi=True,
     )
     assert raw.source_state is SourceState.UNSOURCED

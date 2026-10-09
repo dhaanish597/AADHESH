@@ -14,13 +14,10 @@ from __future__ import annotations
 
 import json
 from datetime import datetime
-from functools import cached_property
 from pathlib import Path
 from typing import Any
 
-from jsonschema import Draft202012Validator
-from jsonschema import ValidationError as JsonSchemaValidationError
-
+from aadesh_core.corpus_validation import SCHEMA_DIR, validate_entry
 from aadesh_core.domain import (
     Citation,
     Entitlement,
@@ -28,21 +25,21 @@ from aadesh_core.domain import (
     InvocationLifecycle,
     InvokedStage,
     Obligation,
+    Predicate,
     SourceDocument,
     SourceState,
     StageBand,
+    VerifiedCorpus,
 )
 from aadesh_core.errors import CorpusIntegrityError
 from aadesh_core.verification import VerificationReport, verify_corpus
 
 FORBIDDEN_KEYS = {"source_state", "verified", "is_verified"}
 
+
 #: Schemas ship WITH THE CODE, not with the corpus. A corpus directory that supplied its own
 #: schema could weaken its own validation -- the same self-certifying problem that
 #: `_reject_self_declared_provenance` exists to prevent, one level up.
-SCHEMA_DIR = Path(__import__("aadesh_core").__file__).parent / "corpus_schemas"
-
-
 class LocalFileCorpus:
     """Reads corpus/ from the filesystem. No network, no AWS."""
 
@@ -52,17 +49,17 @@ class LocalFileCorpus:
 
     # -- verification -------------------------------------------------------
 
-    @cached_property
+    @property
     def _report(self) -> VerificationReport:
         return verify_corpus(self.root)
 
     def verification_report(self) -> VerificationReport:
         return self._report
 
-    def _state_for(self, entry_id: str) -> SourceState:
+    def _state_for(self, kind: str, entry_id: str, report: VerificationReport) -> SourceState:
         return (
             SourceState.VERIFIED
-            if entry_id in self._report.verified_entry_ids
+            if (kind, entry_id) in report.verified_entries
             else SourceState.UNSOURCED
         )
 
@@ -92,6 +89,8 @@ class LocalFileCorpus:
 
     def obligations(self) -> tuple[Obligation, ...]:
         out: list[Obligation] = []
+        report = self._report
+        hashes = {doc.doc_id: doc.sha256 for doc in self.documents()}
         for entry in self._read("obligations/construction_site.json", "obligations"):
             self._validate(entry, "obligation.schema.json")
             out.append(
@@ -100,19 +99,32 @@ class LocalFileCorpus:
                     entity_types=tuple(entry["entity_types"]),
                     triggers_at_stage=entry["triggers_at_stage"],
                     label=entry["label"],
-                    field=entry["field"],
-                    operator=entry["operator"],
-                    value=entry["value"],
-                    citation=_citation(entry),
+                    applicability=_predicate(entry["applicability"]),
+                    requirement=_predicate(entry["requirement"]),
+                    required_action=entry["required_action"],
+                    citation=_citation(entry, hashes),
+                    evidence=tuple(
+                        (key, _citation(value, hashes)) for key, value in entry["evidence"].items()
+                    ),
+                    stage_evidence=entry["stage_evidence"],
+                    continuation_evidence=entry["continuation_evidence"],
+                    action_evidence=tuple(entry["action_evidence"]),
+                    clarification_when=(
+                        _predicate(entry["clarification_when"])
+                        if "clarification_when" in entry
+                        else None
+                    ),
+                    clarification=entry.get("clarification"),
                     issues_parchi=entry["consequence"]["issues_parchi"],
                     worker_entitlement_ref=entry["consequence"].get("worker_entitlement_ref"),
-                    source_state=self._state_for(entry["obligation_id"]),
+                    source_state=self._state_for("obligation", entry["obligation_id"], report),
                 )
             )
         return tuple(out)
 
     def entitlements(self) -> tuple[Entitlement, ...]:
         out: list[Entitlement] = []
+        report = self._report
         for entry in self._read("entitlements/cess_fund.json", "entitlements"):
             self._validate(entry, "entitlement.schema.json")
             amount_entry = entry.get("amount")
@@ -133,13 +145,15 @@ class LocalFileCorpus:
                     readiness_requirements=tuple(
                         (r["label"], _citation(r)) for r in entry.get("readiness_requirements", [])
                     ),
-                    source_state=self._state_for(entry["entitlement_id"]),
+                    source_state=self._state_for("entitlement", entry["entitlement_id"], report),
                 )
             )
         return tuple(out)
 
     def stage_bands(self) -> tuple[StageBand, ...]:
         out: list[StageBand] = []
+        report = self._report
+        hashes = {doc.doc_id: doc.sha256 for doc in self.documents()}
         for entry in self._read("stage_bands/grap_stage_bands.json", "stage_bands"):
             self._validate(entry, "stage_band.schema.json")
             out.append(
@@ -148,11 +162,56 @@ class LocalFileCorpus:
                     pollutant=entry["pollutant"],
                     aqi_lower=entry["aqi_lower"],
                     aqi_upper=entry.get("aqi_upper"),
-                    citation=_citation(entry),
-                    source_state=self._state_for(str(entry["stage"])),
+                    aqi_lower_inclusive=entry.get("aqi_lower_inclusive", True),
+                    citation=_citation(entry, hashes),
+                    source_state=self._state_for("stage_band", str(entry["stage"]), report),
                 )
             )
         return tuple(out)
+
+    def snapshot(self) -> VerifiedCorpus:
+        """Re-prove on EVERY call. A previous verification is not a cache of current truth."""
+        report = self.verification_report()
+        if report.has_failures:
+            details = [
+                *report.errors,
+                *(c.detail for c in report.citations_failed),
+                *(d.detail for d in report.documents_failed),
+            ]
+            raise CorpusIntegrityError("Corpus cannot be re-proved: " + "; ".join(details))
+        obligations = self.obligations()
+        bands = self.stage_bands()
+        invocations = self.invocation_history()
+        receipts = {
+            citation
+            for rule in obligations
+            if rule.source_state is SourceState.VERIFIED
+            for citation in rule.citations
+        }
+        receipts.update(
+            band.citation for band in bands if band.source_state is SourceState.VERIFIED
+        )
+        for invocation in invocations:
+            if invocation.citation is not None:
+                receipts.add(invocation.citation)
+            if invocation.revocation_citation is not None:
+                receipts.add(invocation.revocation_citation)
+        # Refuse a change during loading, as well as a change since the previous call.
+        if self.verification_report().has_failures:
+            raise CorpusIntegrityError("Corpus changed during snapshot verification")
+        return VerifiedCorpus(
+            obligations=obligations,
+            stage_bands=bands,
+            invocations=invocations,
+            proved_citations=frozenset(receipts),
+            proved_obligations=frozenset(
+                rule for rule in obligations if rule.source_state is SourceState.VERIFIED
+            ),
+            proved_invocations=frozenset(invocations),
+            proved_stage_bands=frozenset(
+                band for band in bands if band.source_state is SourceState.VERIFIED
+            ),
+        )
 
     # -- SourceDocumentStore port ------------------------------------------
 
@@ -265,6 +324,8 @@ class LocalFileCorpus:
             ) from exc
 
         lifecycle = InvocationLifecycle(payload.get("lifecycle", InvocationLifecycle.ACTIVE))
+        if invoked_at.utcoffset() is None:
+            raise CorpusIntegrityError("invoked_stage.json: invoked_at must include a timezone")
         revoked_at: datetime | None = None
         revocation_citation: Citation | None = None
         revocation = payload.get("revocation")
@@ -280,7 +341,12 @@ class LocalFileCorpus:
                 source_doc=revocation["source_doc"],
                 page=revocation["page"],
                 quote=revocation["quote"],
+                source_hash=documents[revocation["source_doc"]]["sha256"],
             )
+            if revoked_at.utcoffset() is None or revoked_at <= invoked_at:
+                raise CorpusIntegrityError(
+                    "invoked_stage.json: revoked_at must include a timezone and follow invoked_at"
+                )
 
         return InvokedStage(
             stage=payload["stage"],
@@ -290,6 +356,8 @@ class LocalFileCorpus:
             lifecycle=lifecycle,
             revoked_at=revoked_at,
             revocation_citation=revocation_citation,
+            citation=_citation(payload, {key: doc["sha256"] for key, doc in documents.items()}),
+            source_state=SourceState.VERIFIED,
         )
 
     def _invoked_stage_is_proved(self) -> bool:
@@ -319,25 +387,21 @@ def reject_self_declared_provenance(entry: dict[str, Any], where: str) -> None:
         )
 
 
-def validate_entry(
-    entry: dict[str, Any], schema_name: str, *, schema_dir: Path = SCHEMA_DIR
-) -> None:
-    """Validate one corpus entry against a schema that ships with the CODE, not the corpus."""
-    schema_path = Path(schema_dir) / schema_name
-    if not schema_path.exists():
-        raise CorpusIntegrityError(
-            f"Schema {schema_name} is missing from {schema_dir}. Refusing to handle corpus "
-            f"data unvalidated."
-        )
-    schema = json.loads(schema_path.read_text(encoding="utf-8"))
-    try:
-        Draft202012Validator(schema).validate(entry)
-    except JsonSchemaValidationError as exc:
-        field = "/".join(str(p) for p in exc.absolute_path) or "<root>"
-        raise CorpusIntegrityError(
-            f"{schema_name}: invalid entry at {field}: {exc.message}"
-        ) from exc
+def _citation(entry: dict[str, Any], hashes: dict[str, str] | None = None) -> Citation:
+    return Citation(
+        source_doc=entry["source_doc"],
+        page=entry["page"],
+        quote=entry["quote"],
+        source_hash=(hashes or {}).get(entry["source_doc"]),
+    )
 
 
-def _citation(entry: dict[str, Any]) -> Citation:
-    return Citation(source_doc=entry["source_doc"], page=entry["page"], quote=entry["quote"])
+def _predicate(entry: dict[str, Any]) -> Predicate:
+    value = entry.get("value")
+    return Predicate(
+        operator=entry["operator"],
+        evidence=tuple(entry["evidence"]),
+        field=entry.get("field"),
+        value=tuple(value) if isinstance(value, list) else value,
+        conditions=tuple(_predicate(child) for child in entry.get("conditions", ())),
+    )

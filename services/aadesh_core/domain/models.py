@@ -9,10 +9,20 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
+from types import MappingProxyType
 from typing import Any
 
-from aadesh_core.domain.enums import InvocationLifecycle, ObligationStatus, Provenance, SourceState
+from aadesh_core.domain.enums import (
+    InvocationLifecycle,
+    ObligationStatus,
+    Provenance,
+    ResolutionMode,
+    SourceState,
+    StageAgreement,
+)
+from aadesh_core.domain.facts import MISSING_FACT
+from aadesh_core.domain.predicates import Predicate
 
 CONSTRUCTION_SITE = "construction_site"
 """The only entity type in scope. Deliberately a single value."""
@@ -34,6 +44,7 @@ class Citation:
     source_doc: str
     page: int
     quote: str
+    source_hash: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -100,11 +111,17 @@ class InvokedStage:
     lifecycle: InvocationLifecycle = InvocationLifecycle.ACTIVE
     revoked_at: datetime | None = None
     revocation_citation: Citation | None = None
+    citation: Citation | None = None
+    source_state: SourceState = SourceState.UNSOURCED
 
     @property
     def is_current(self) -> bool:
         """True only for a stage presently in force. A revoked invocation is history."""
-        return self.lifecycle is InvocationLifecycle.ACTIVE
+        return (
+            self.lifecycle is InvocationLifecycle.ACTIVE
+            and self.revoked_at is None
+            and self.revocation_citation is None
+        )
 
     def describe(self) -> str:
         """A single honest sentence about what this record is.
@@ -146,19 +163,59 @@ class StageStatus:
 
     invoked: InvokedStage | None
     implied: ImpliedStage | None
+    mode: ResolutionMode = ResolutionMode.CURRENT
+
+    @property
+    def official_stage(self) -> int | None:
+        return self.invoked.stage if self.invoked is not None else None
+
+    @property
+    def implied_stage(self) -> int | None:
+        return self.implied.stage if self.implied is not None else None
+
+    @property
+    def status(self) -> StageAgreement:
+        if self.implied_stage is not None:
+            if self.implied_stage != self.official_stage:
+                return StageAgreement.DISCREPANCY
+            return StageAgreement.ALIGNED
+        if self.official_stage is not None:
+            return StageAgreement.OFFICIAL_ONLY
+        return StageAgreement.NO_OFFICIAL_INVOCATION
+
+    @property
+    def reason(self) -> str:
+        official = "historical" if self.mode is ResolutionMode.REPLAY else "current"
+        if self.status is StageAgreement.DISCREPANCY:
+            observed = f"Observed AQI implies {stage_name(self.implied_stage)}, but "
+            if self.official_stage is None:
+                return observed + f"no verified {official} CAQM invocation is present."
+            return (
+                observed
+                + f"the verified {official} CAQM invocation is {stage_name(self.official_stage)}. "
+                "Aadesh does not infer legal activation from AQI. "
+                "Obligations are evaluated against the verified official invocation."
+            )
+        if self.official_stage is None:
+            return f"No verified {official} CAQM invocation is present."
+        if self.status is StageAgreement.ALIGNED:
+            return f"Observed AQI and the verified {official} invocation agree."
+        return (
+            f"The verified {official} invocation is {stage_name(self.official_stage)}; "
+            "an implied AQI stage is not determinable."
+        )
 
     @property
     def divergent(self) -> bool:
-        """True only when both are known AND they disagree.
+        return self.status is StageAgreement.DISCREPANCY
 
-        An undeterminable implied stage is not a divergence; it is an absence. Reporting it
-        as a conflict would manufacture an alarm out of missing corpus data.
-        """
-        if self.invoked is None or self.implied is None:
-            return False
-        if not self.implied.is_determinable:
-            return False
-        return self.invoked.stage != self.implied.stage
+
+def stage_name(stage: int | None) -> str:
+    """Presentation only; no activation or threshold semantics."""
+    ordinals = ("", "I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X")
+    if stage is None:
+        return "NONE"
+    return f"Stage {ordinals[stage] if 0 < stage < len(ordinals) else stage}"
 
 
 # ---------------------------------------------------------------------------
@@ -178,13 +235,58 @@ class Obligation:
     entity_types: tuple[str, ...]
     triggers_at_stage: int
     label: str
-    field: str
-    operator: str
-    value: Any
+    applicability: Predicate
+    requirement: Predicate
+    required_action: str
     citation: Citation
     issues_parchi: bool
+    evidence: tuple[tuple[str, Citation], ...]
+    stage_evidence: str
+    continuation_evidence: str
+    action_evidence: tuple[str, ...]
+    clarification_when: Predicate | None = None
+    clarification: str | None = None
     worker_entitlement_ref: str | None = None
     source_state: SourceState = SourceState.UNSOURCED
+
+    @property
+    def citations(self) -> tuple[Citation, ...]:
+        return (self.citation, *(citation for _, citation in self.evidence))
+
+
+@dataclass(frozen=True, slots=True)
+class VerifiedCorpus:
+    """An immutable verification snapshot supplied by a trusted corpus adapter.
+
+    The proof receipts bind complete rules, bands and invocations as well as their exact
+    quotes, pages, documents and source hashes. Setting a source_state flag alone does not
+    admit an object to resolution.
+    Reusing a snapshot intentionally replays those bytes; obtain a fresh snapshot for each
+    new production resolution so filesystem changes are re-proved.
+    """
+
+    obligations: tuple[Obligation, ...]
+    stage_bands: tuple[StageBand, ...]
+    invocations: tuple[InvokedStage, ...]
+    proved_citations: frozenset[Citation]
+    proved_obligations: frozenset[Obligation] = frozenset()
+    proved_invocations: frozenset[InvokedStage] = frozenset()
+    proved_stage_bands: frozenset[StageBand] = frozenset()
+
+
+@dataclass(frozen=True, slots=True)
+class ReplayContext:
+    invocation_date: str
+    revocation_date: str
+    at: datetime | None = None
+
+    def __post_init__(self) -> None:
+        start = date.fromisoformat(self.invocation_date)
+        end = date.fromisoformat(self.revocation_date)
+        if start >= end:
+            raise ValueError("Replay invocation_date must precede revocation_date")
+        if self.at is not None and self.at.utcoffset() is None:
+            raise ValueError("Replay at must include a timezone")
 
 
 @dataclass(frozen=True, slots=True)
@@ -229,6 +331,7 @@ class StageBand:
     aqi_upper: float | None
     citation: Citation
     source_state: SourceState = SourceState.UNSOURCED
+    aqi_lower_inclusive: bool = True
 
 
 # ---------------------------------------------------------------------------
@@ -248,23 +351,14 @@ class SiteProfile:
     nearest_station_id: str
     facts: Mapping[str, Any] = field(default_factory=dict)
 
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "facts", MappingProxyType(dict(self.facts)))
+
     def fact(self, name: str) -> Any:
-        return self.facts.get(name, _MISSING)
+        return self.facts.get(name, MISSING_FACT)
 
     def has_fact(self, name: str) -> bool:
         return name in self.facts
-
-
-class _Missing:
-    __slots__ = ()
-
-    def __repr__(self) -> str:
-        return "MISSING"
-
-
-_MISSING = _Missing()
-MISSING_FACT = _MISSING
-"""Returned by SiteProfile.fact() when the key is absent entirely."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -307,6 +401,26 @@ class ObligationResult:
     reason: str
     issues_parchi: bool
     worker_entitlement_ref: str | None = None
+    applicable: bool | None = None
+    required_action: str = ""
+    evidence: tuple[Citation, ...] = ()
+    mode: ResolutionMode = ResolutionMode.CURRENT
+
+    @property
+    def source_doc(self) -> str:
+        return self.citation.source_doc
+
+    @property
+    def source_page(self) -> int:
+        return self.citation.page
+
+    @property
+    def source_quote(self) -> str:
+        return self.citation.quote
+
+    @property
+    def source_hash(self) -> str | None:
+        return self.citation.source_hash
 
 
 @dataclass(frozen=True, slots=True)
@@ -318,7 +432,7 @@ class ExcludedObligation:
 
 
 @dataclass(frozen=True, slots=True)
-class ObligationSet:
+class ResolutionResult:
     """The full determination for one site at one moment."""
 
     site_id: str
@@ -328,6 +442,11 @@ class ObligationSet:
     excluded_unsourced: tuple[ExcludedObligation, ...]
     reading: StationReading | None
     resolved_at: datetime
+    stage_status: StageStatus
+    mode: ResolutionMode = ResolutionMode.CURRENT
+    replay_context: ReplayContext | None = None
+    replay_notice: str | None = None
+    current_stage: InvokedStage | None = None
 
     @property
     def provenance(self) -> Provenance | None:
@@ -336,7 +455,7 @@ class ObligationSet:
 
     @property
     def applicable(self) -> tuple[ObligationResult, ...]:
-        return tuple(r for r in self.results if r.status is ObligationStatus.MET)
+        return tuple(r for r in self.results if r.applicable is True)
 
     @property
     def unknown(self) -> tuple[ObligationResult, ...]:
@@ -344,7 +463,7 @@ class ObligationSet:
 
     @property
     def not_applicable(self) -> tuple[ObligationResult, ...]:
-        return tuple(r for r in self.results if r.status is ObligationStatus.NOT_MET)
+        return tuple(r for r in self.results if r.status is ObligationStatus.NOT_APPLICABLE)
 
     @property
     def fully_sourced(self) -> bool:
@@ -354,3 +473,7 @@ class ObligationSet:
         than present a partial corpus as a complete answer.
         """
         return not self.excluded_unsourced
+
+
+# Existing integrations consume the same result object; status now describes compliance.
+ObligationSet = ResolutionResult

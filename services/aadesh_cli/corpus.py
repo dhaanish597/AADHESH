@@ -49,6 +49,7 @@ from aadesh_adapters.corpus.local_file import (
     validate_entry,
 )
 from aadesh_adapters.sources.pdf_text import SourceExtractionError, extract_pages
+from aadesh_core.citations import labelled_citations, page_text_sha256
 from aadesh_core.errors import AadeshError, CorpusIntegrityError
 from aadesh_core.sources import is_official_source_url
 from aadesh_core.verification import normalise
@@ -210,6 +211,9 @@ def ingest_document(
             "byte_size": len(data),
             "local_path": local_path,
             "pages_dir": pages_dir,
+            "page_sha256": {
+                str(number): page_text_sha256(text) for number, text in enumerate(pages, start=1)
+            },
         }
     )
     _write_manifest(corpus_root, documents)
@@ -282,19 +286,7 @@ def add_entry(*, corpus_root: Path, kind: str, entry: dict[str, Any]) -> Path:
 
 def _labelled_citations(entry: dict[str, Any]) -> list[tuple[str, dict[str, Any]]]:
     """An entry's citations, each labelled so a failure can say WHICH one is unfound."""
-    found: list[tuple[str, dict[str, Any]]] = []
-    if CITATION_KEYS.issubset(entry):
-        found.append(("citation", entry))
-    amount = entry.get("amount")
-    if isinstance(amount, dict) and CITATION_KEYS.issubset(amount):
-        found.append(("amount", amount))
-    revocation = entry.get("revocation")
-    if isinstance(revocation, dict) and CITATION_KEYS.issubset(revocation):
-        found.append(("revocation", revocation))
-    for requirement in entry.get("readiness_requirements") or []:
-        if isinstance(requirement, dict) and CITATION_KEYS.issubset(requirement):
-            found.append(("readiness requirement", requirement))
-    return found
+    return labelled_citations(entry)
 
 
 def _require_quote_on_page(
@@ -325,7 +317,16 @@ def _require_quote_on_page(
             f"the document again."
         )
 
-    if normalise(quote) in normalise(page_file.read_text(encoding="utf-8")):
+    source_path = corpus_root / document["local_path"]
+    if (
+        not source_path.exists()
+        or hashlib.sha256(source_path.read_bytes()).hexdigest() != document["sha256"]
+    ):
+        raise EntryRejected(f"{entry_id}: source {doc_id!r} no longer hashes to its manifest")
+    raw_text = page_file.read_text(encoding="utf-8")
+    if document.get("page_sha256", {}).get(str(page)) != page_text_sha256(raw_text):
+        raise EntryRejected(f"{entry_id}: extracted page {page} hash is missing or mismatched")
+    if normalise(quote) in normalise(raw_text):
         return
 
     raise QuoteNotFound(

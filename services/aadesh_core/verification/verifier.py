@@ -26,10 +26,12 @@ from __future__ import annotations
 
 import hashlib
 import json
-import unicodedata
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from aadesh_core.citations import labelled_citations, normalise, page_text_sha256, quote_names_stage
+from aadesh_core.corpus_validation import validate_entry
+from aadesh_core.errors import CorpusIntegrityError
 from aadesh_core.sources import is_official_source_url
 
 MANIFEST = "sources/manifest.json"
@@ -99,24 +101,14 @@ class VerificationReport:
 
     @property
     def verified_entry_ids(self) -> set[str]:
-        return {c.entry_id for c in self.citations if c.ok}
+        return {entry_id for _, entry_id in self.verified_entries}
 
-
-def normalise(text: str) -> str:
-    """Fold the differences that PDF text extraction introduces but meaning does not.
-
-    Unicode NFKC plus whitespace collapsing. This is the one place verification is lenient,
-    and only about typography: a quote must still match word for word. Curly quotes, ligatures
-    and a line break mid-sentence are extraction artefacts, not paraphrase.
-    """
-    folded = unicodedata.normalize("NFKC", text)
-    # The "ambiguous" characters below are the whole point of this function: they are what a
-    # PDF extractor emits where the order has a plain quote or hyphen. RUF001 is suppressed
-    # deliberately rather than by rewriting them into the ASCII they are being folded TO.
-    folded = folded.replace("’", "'").replace("‘", "'")  # noqa: RUF001
-    folded = folded.replace("“", '"').replace("”", '"')
-    folded = folded.replace("–", "-").replace("—", "-")  # noqa: RUF001
-    return " ".join(folded.split()).casefold()
+    @property
+    def verified_entries(self) -> set[tuple[str, str]]:
+        """Every citation must pass; identities are scoped by kind to prevent collisions."""
+        good = {(c.entry_kind, c.entry_id) for c in self.citations if c.ok}
+        bad = {(c.entry_kind, c.entry_id) for c in self.citations if not c.ok}
+        return good - bad
 
 
 def _load_json(path: Path) -> dict:
@@ -195,8 +187,23 @@ def verify_corpus(corpus_root: Path) -> VerificationReport:
             report.errors.append(f"{relative} is not valid JSON: {exc}")
             continue
 
+        seen: set[str] = set()
         for entry in payload.get(list_key, []):
             entry_id = str(entry.get(id_key, "<no id>"))
+            if entry_id in seen:
+                report.citations.append(
+                    CitationCheck(kind, entry_id, "<duplicate>", 0, False, "duplicate entry id")
+                )
+            seen.add(entry_id)
+            try:
+                validate_entry(entry, f"{kind}.schema.json")
+            except CorpusIntegrityError as exc:
+                report.errors.append(f"{relative}: {exc}")
+                report.citations.append(
+                    CitationCheck(
+                        kind, entry_id, str(entry.get("source_doc", "<none>")), 0, False, str(exc)
+                    )
+                )
             for citation in _citations_in(entry):
                 report.citations.append(
                     _check_citation(
@@ -218,6 +225,15 @@ def verify_corpus(corpus_root: Path) -> VerificationReport:
         if not isinstance(entry, dict):
             continue
         entry_id = str(entry.get("stage", "<no stage>"))
+        try:
+            validate_entry(entry, "invoked_stage.schema.json")
+        except CorpusIntegrityError as exc:
+            report.errors.append(f"{relative}: {exc}")
+            report.citations.append(
+                CitationCheck(
+                    kind, entry_id, str(entry.get("source_doc", "<none>")), 0, False, str(exc)
+                )
+            )
         citations = _citations_in(entry)
         if not citations:
             report.errors.append(
@@ -264,56 +280,7 @@ def verify_corpus(corpus_root: Path) -> VerificationReport:
 
 
 def _citations_in(entry: dict) -> list[dict]:
-    """An entry's own citation, plus any nested ones (amounts, revocations, requirements)."""
-    found: list[dict] = []
-    if {"source_doc", "page", "quote"} <= entry.keys():
-        found.append(entry)
-    amount = entry.get("amount")
-    if isinstance(amount, dict) and {"source_doc", "page", "quote"} <= amount.keys():
-        found.append(amount)
-    # A revocation is a claim of its own: "a later order ended this stage". Left out here it
-    # would be the one legal fact in the corpus that nothing re-proves.
-    revocation = entry.get("revocation")
-    if isinstance(revocation, dict) and {"source_doc", "page", "quote"} <= revocation.keys():
-        found.append(revocation)
-    for requirement in entry.get("readiness_requirements", []) or []:
-        if isinstance(requirement, dict) and {"source_doc", "page", "quote"} <= requirement.keys():
-            found.append(requirement)
-    return found
-
-
-#: Roman ordinals up to Stage X. Beyond that, only the arabic form is recognised. The
-#: conversion exists so "the quote must name the stage it invokes" can be checked against the
-#: forms an order actually uses ("Stage-III" and "Stage 3" both appear in CAQM documents).
-_ROMAN_ORDINALS = {
-    1: "i",
-    2: "ii",
-    3: "iii",
-    4: "iv",
-    5: "v",
-    6: "vi",
-    7: "vii",
-    8: "viii",
-    9: "ix",
-    10: "x",
-}
-
-
-def quote_names_stage(quote: str, stage: int) -> bool:
-    """True if `quote` names `stage` as a GRAP stage, in roman or arabic form.
-
-    This is the check that makes a citation SUPPORT its claim rather than merely exist. An
-    invoked stage is the fact that decides which obligations apply; a quote that proves only
-    that some sentence about something appears on a page does not prove which stage was
-    invoked. Without this, changing `stage` from 3 to 4 while leaving the quoted sentence
-    intact -- the exact edit the corpus gate must refuse -- would pass verification.
-    """
-    text = normalise(quote)
-    ordinal = _ROMAN_ORDINALS.get(stage)
-    tokens = [f"stage-{stage}", f"stage {stage}"]
-    if ordinal:
-        tokens += [f"stage-{ordinal}", f"stage {ordinal}"]
-    return any(token in text for token in tokens)
+    return [citation for _, citation in labelled_citations(entry)]
 
 
 def _check_citation(
@@ -326,8 +293,16 @@ def _check_citation(
     citation: dict,
 ) -> CitationCheck:
     doc_id = citation["source_doc"]
-    page = int(citation["page"])
+    page = citation["page"]
     quote = citation["quote"]
+    if (
+        not isinstance(doc_id, str)
+        or type(page) is not int
+        or page < 1
+        or not isinstance(quote, str)
+        or not normalise(quote)
+    ):
+        return CitationCheck(kind, entry_id, str(doc_id), 0, False, "malformed citation")
 
     doc = documents.get(doc_id)
     if doc is None:
@@ -364,7 +339,19 @@ def _check_citation(
                 False,
                 f"no extracted text for page {page} (expected {page_file.name})",
             )
-        page_cache[key] = normalise(page_file.read_text(encoding="utf-8"))
+        raw_text = page_file.read_text(encoding="utf-8")
+        expected_hash = doc.get("page_sha256", {}).get(str(page))
+        if expected_hash != page_text_sha256(raw_text):
+            return CitationCheck(
+                kind,
+                entry_id,
+                doc_id,
+                page,
+                False,
+                f"extracted page {page} hash mismatch or missing page hash; "
+                "the cached text cannot be re-proved as the recorded extraction",
+            )
+        page_cache[key] = normalise(raw_text)
 
     if normalise(quote) in page_cache[key]:
         return CitationCheck(kind, entry_id, doc_id, page, True, "quote found verbatim")

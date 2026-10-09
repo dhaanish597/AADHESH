@@ -13,10 +13,12 @@ the several dozen GRAP trackers that will hardcode `if aqi > 400`.
 from __future__ import annotations
 
 from collections.abc import Sequence
+from math import isfinite
 
 from aadesh_core.domain import (
     ImpliedStage,
     InvokedStage,
+    ResolutionMode,
     SourceState,
     StageBand,
     StageStatus,
@@ -27,6 +29,8 @@ from aadesh_core.errors import CorpusIntegrityError
 
 def _contains(band: StageBand, value: float) -> bool:
     if value < band.aqi_lower:
+        return False
+    if value == band.aqi_lower and not band.aqi_lower_inclusive:
         return False
     if band.aqi_upper is None:
         return True
@@ -47,7 +51,14 @@ def derive_implied_stage(
     if reading is None:
         return ImpliedStage(stage=None, citation=None, reading=None)
 
-    verified = [b for b in bands if b.source_state is SourceState.VERIFIED]
+    if type(reading.value) not in (int, float) or not isfinite(reading.value):
+        return ImpliedStage(stage=None, citation=None, reading=reading)
+    verified = [
+        b
+        for b in bands
+        if b.source_state is SourceState.VERIFIED
+        and b.pollutant.casefold() == reading.parameter.casefold()
+    ]
     if not verified:
         return ImpliedStage(stage=None, citation=None, reading=reading)
 
@@ -71,9 +82,13 @@ def stage_status(
     invoked: InvokedStage | None,
     reading: StationReading | None,
     bands: Sequence[StageBand],
+    mode: ResolutionMode = ResolutionMode.CURRENT,
 ) -> StageStatus:
     """Build the single status line: what was invoked, and what the air implies."""
     return StageStatus(
-        invoked=invoked,
+        invoked=invoked
+        if invoked is None or invoked.is_current or mode is ResolutionMode.REPLAY
+        else None,
         implied=derive_implied_stage(reading=reading, bands=bands),
+        mode=mode,
     )

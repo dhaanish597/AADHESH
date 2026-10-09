@@ -1,4 +1,10 @@
-# Corpus audit — authoritative CAQM GRAP sources
+# Initial corpus audit — authoritative CAQM GRAP sources
+
+This records the initial ingestion audit and its 236-test baseline. The subsequent
+[deterministic engine audit](obligation-engine.md) corrects the single-fact rule model and
+Stage IV boundary representation, preserving all original primary citations. Current
+verification includes 55 citation checks with the additional supporting evidence. Historical
+counts and the original encoding table below are retained as an audit trail.
 
 This report is the reviewer's path from a rule the system enforces back to the official bytes
 it came from:
@@ -57,9 +63,9 @@ above, is stamped **(Revision: 29.09.2026)** — a later revision.
   **21.11.2025**". That is the revision those orders were operating under.
 - We did **not** possess, and did not ingest, the 21.11.2025 schedule. We encoded the current
   schedule we hold (29.09.2026) and cite it exactly as printed.
-- The AQI bands are identical between the two revisions (the classification clause is
-  unchanged), so the stage-band citations are unaffected. Some Stage I C&D wording differs
-  between revisions; we cite the 29.09.2026 wording because that is the document we hold.
+- The held September 2026 schedule establishes the encoded AQI bands and obligations.
+  Equivalence to the unavailable November 2025 schedule is not established. Applying January's
+  stage to these rules can therefore be a labelled scenario replay only.
 
 **Nothing was encoded from the 21.11.2025 revision**, because we hold no official bytes for it.
 
@@ -98,11 +104,11 @@ a guard test fails the build if an AQI-range literal appears in `aadesh_core/dom
 | III | AQI | 401–450 | `…schedule-2026-09-29` | 11 | `Stage III – ‘Severe’ Air Quality (DELHI AQI ranging between 401-450)` |
 | IV | AQI | > 450 | `…schedule-2026-09-29` | 16 | `Stage IV – ‘Severe +’ Air Quality (DELHI AQI > 450)` |
 
-**Transformation note (open, documented):** Stage IV is printed as `AQI > 450` (strict). Because
-`aqi_lower` is an inclusive bound and Stage III already owns 401–450, Stage IV was encoded with
-`aqi_lower = 451`, `aqi_upper = null`. This is the only place a numeric value was derived rather
-than copied, and it is exactly `>450` restated for integer AQI. No band below 201 exists, so a
-reading under 201 is honestly *undeterminable*, not Stage I.
+**Representation correction:** Stage IV is printed as `AQI > 450` (strict). The initial
+encoding used an inclusive `aqi_lower = 451`, which assumed integer AQI. The engine now stores
+`aqi_lower = 450, aqi_lower_inclusive = false, aqi_upper = null`, preserving the strict source
+comparison for fractional observations too. No band below 201 exists, so a reading under 201
+is *undeterminable*, not Stage I.
 
 ---
 
@@ -110,8 +116,9 @@ reading under 201 is honestly *undeterminable*, not Stage I.
 
 Scope is deliberately ONE entity type, `construction_site`. Vehicle, school, industrial,
 traffic, stubble-burning, waste-sector and general citizen-charter measures were **not encoded**
-(see §6). Each obligation keys on a single site-profile fact; a missing or unknown fact resolves
-to `UNKNOWN`, never to “does not apply”.
+(see §6). The following table records the **initial** single-fact encoding. The resolver now
+uses separate applicability and compliance trees, documented in the
+[engine audit](obligation-engine.md#audit-before-implementation).
 
 | obligation_id | stage | site fact (operator value) | doc p. | verbatim quote |
 |---|---|---|---|---|
@@ -127,12 +134,12 @@ to `UNKNOWN`, never to “does not apply”.
 Obligations at stages III/IV set `consequence.issues_parchi = true` (work halts → a worker may
 be displaced); the Stage I measures do not.
 
-**Encoding judgement (open, documented):** the obligation model compares ONE site fact per
-obligation, so a clause with two conditions cannot be reproduced exactly. For
-`grap1-cd-large-project-registration` the source conditions on *both* `plot size ≥ 500 sqm` and
-*not registered*; we keyed on `plot_size_sqm ≥ 500` and left the registration condition in the
-label and quote rather than inventing a compound fact. This is a known modelling limit, recorded
-here rather than papered over.
+**Model correction completed:** the initial model keyed registration on `plot_size_sqm ≥ 500`
+and left registration in its label/quote. That approximation is no longer used. Continuing
+work at the cited plot size now requires both registration and the other referenced
+remote-monitoring requirements; missing required attestations remain unknown. All Stage III
+rules now carry the cited activity scope and conditional project exceptions, while the
+page 12 permission ambiguity is explicit. See the engine audit for each correction.
 
 ---
 
@@ -196,10 +203,11 @@ rather than summarised.
 Encoding more was rejected at every point where provenance was uncertain:
 
 - **21.11.2025 schedule.** Referenced by the January orders, but we hold no official bytes for
-  it. Dropped.
+  it. Not encoded; this prevents a full reconstruction of January's legal obligations.
 - **Direction No. 97 dated 20.02.2026** ("Mitigation of dust in construction and demolition
-  projects — Management of demolition waste"). **Not ingested**: no obligation in this
-  construction-site workflow requires it. Adding it would only inflate the rule count.
+  projects — Management of demolition waste"). **Not ingested**. The engine cannot invent
+  the detailed content of referenced Directions; required compliance is an explicit site
+  attestation, unknown until recorded.
 - **Vehicle / traffic measures** (Stage III items 4–7, Stage IV items 1–2), **stone crushers /
   mining** (Stage III 2–3), **schools** (Stage III 8), **offices / WFH** (Stage III 9–10),
   **industry, DG sets, firecrackers, thermal plants** and the **CITIZEN CHARTER** — all out of
@@ -208,8 +216,7 @@ Encoding more was rejected at every point where provenance was uncertain:
   agencies, not a condition on a construction site.
 - **Entitlement amounts.** `corpus/entitlements/cess_fund.json` is left **empty**. No
   authoritative CAQM document we hold states a rupee figure, and the task forbids inventing one.
-  Aadesh reports provable worker-event metrics (worker-days, acknowledgement count, parchi
-  count) instead.
+  The resolver reports operational clause/status counts only.
 - **The 21.11.2025 C&D wording, "remove C&D waste immediately" citizen-charter line, and any
   measure not tied to a site fact** — omitted rather than interpreted.
 
@@ -260,7 +267,7 @@ detects the flipped byte (12 dependent citations fail).
 `grap3-cd-demolition`
 
 1. **Rule** — `corpus/obligations/construction_site.json`, `obligation_id: grap3-cd-demolition`.
-2. **Page** — `4` of `caqm-grap-schedule-2026-09-29` (Stage III item 1(i), p.11 of the PDF).
+2. **Page** — `11` of `caqm-grap-schedule-2026-09-29` (Stage III item 1(i)).
 3. **Quote** — `All demolition works.`
 4. **Extracted text** — `corpus/sources/pages/caqm-grap-schedule-2026-09-29/p11.txt`.
 5. **Source PDF** — `corpus/sources/caqm-grap-schedule-2026-09-29.pdf`.
@@ -276,9 +283,10 @@ detects the flipped byte (12 dependent citations fail).
 1. **OCR artefacts** in the two January order PDFs (§5). The invocation quote carries them
    verbatim; the schedule PDF extracts cleanly.
 2. **Schedule revision mismatch** with the brief (§1): encoded 29.09.2026, not 21.11.2025.
-3. **Stage IV bound derived** from `> 450` to `aqi_lower = 451` (§3).
-4. **One fact per obligation** — the `plot_size_sqm` / registration clause is a single-condition
-   approximation (§4).
+3. **Stage IV bound representation corrected** to the cited strict comparison (§3).
+4. **Single-fact approximation corrected** with compound applicability/compliance predicates
+   (§4). The page 12 relationship between less-polluting activities and permitted categories
+   remains an explicit source clarification, not an inferred ban or permission.
 5. **No entitlement amount** is encoded; none is claimable from these documents.
 6. **No currently-invoked stage is recorded.** As of this audit the corpus proves the January
    Stage III invocation was revoked; it does **not** assert what (if anything) is in force in

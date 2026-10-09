@@ -15,9 +15,9 @@ import pytest
 
 from aadesh_core.domain import UNKNOWN_FACT, ObligationStatus
 from aadesh_core.resolver import resolve_obligations
-from tests.support.builders import FIXED_NOW, invoked_stage, obligation, reading, site
+from tests.support.builders import FIXED_NOW, invoked_stage, obligation, reading, site, snapshot
 
-ALL_OPERATORS = ["eq", "neq", "gt", "gte", "lt", "lte", "in", "not_in"]
+ALL_OPERATORS = ["eq", "gte", "in", "not_in"]
 
 
 def _resolve(**over):
@@ -29,6 +29,7 @@ def _resolve(**over):
         "now": FIXED_NOW,
         **over,
     }
+    kwargs["corpus"] = snapshot(stage=kwargs.pop("stage"), obligations=kwargs.pop("obligations"))
     return resolve_obligations(**kwargs)
 
 
@@ -83,22 +84,24 @@ def test_explicitly_unknown_fact_never_yields_not_met_for_any_operator(operator)
     assert result.status is ObligationStatus.UNKNOWN
 
 
-def test_no_invoked_stage_yields_unknown_not_not_met():
-    """No invoked stage means we lack information, not that nothing applies."""
+def test_no_invoked_stage_cannot_activate_a_requirement():
+    """Verified absence never becomes a legal activation or a compliance violation."""
     result_set = _resolve(stage=None)
     (result,) = result_set.results
-    assert result.status is ObligationStatus.UNKNOWN
-    assert "no grap stage" in result.reason.lower()
+    assert result.status is ObligationStatus.NOT_APPLICABLE
+    assert result.applicable is False
+    assert "no verified current" in result.reason.lower()
 
 
-def test_obligation_triggering_above_invoked_stage_is_not_met():
+def test_obligation_triggering_above_invoked_stage_is_not_applicable():
     """This one IS safely knowable: stage 4 obligations do not apply when 3 is invoked."""
     result_set = _resolve(
         stage=invoked_stage(stage=3),
         obligations=[obligation(triggers_at_stage=4)],
     )
     (result,) = result_set.results
-    assert result.status is ObligationStatus.NOT_MET
+    assert result.status is ObligationStatus.NOT_APPLICABLE
+    assert result.applicable is False
     assert "stage 4" in result.reason
 
 
@@ -115,7 +118,7 @@ def test_incomparable_types_yield_unknown_rather_than_crashing():
     """A corpus authoring slip must degrade to UNKNOWN, not take the resolver down."""
     result_set = _resolve(
         site=site(facts={"has_dust_generating_activity": "yes"}),
-        obligations=[obligation(operator="gt", value=10)],
+        obligations=[obligation(operator="gte", value=10)],
     )
     (result,) = result_set.results
     assert result.status is ObligationStatus.UNKNOWN
@@ -130,7 +133,8 @@ def test_unknown_results_are_separately_addressable():
         ]
     )
     assert [r.obligation_id for r in result_set.unknown] == ["ob-unknown"]
-    assert [r.obligation_id for r in result_set.applicable] == ["ob-known"]
+    assert [r.obligation_id for r in result_set.applicable] == ["ob-known", "ob-unknown"]
+    assert result_set.unknown[0].applicable is True  # Missing compliance, known applicability.
 
 
 def test_resolution_is_deterministic():
@@ -146,6 +150,7 @@ def test_resolution_is_deterministic():
         "reading": reading(),
         "now": FIXED_NOW,
     }
+    kwargs["corpus"] = snapshot(stage=kwargs.pop("stage"), obligations=kwargs.pop("obligations"))
     first = resolve_obligations(**kwargs)
     second = resolve_obligations(**kwargs)
     assert first == second
