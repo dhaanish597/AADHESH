@@ -1,0 +1,188 @@
+{
+  "Comment": "Standing Order machine. Durably holds PENDING_ACK across hours via lambda:invoke.waitForTaskToken. No frontend timer.",
+  "StartAt": "StageTrip",
+  "States": {
+    "StageTrip": {
+      "Type": "Task",
+      "Resource": "arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:aadesh-stage-trip",
+      "Retry": [
+        {
+          "ErrorEquals": ["Lambda.ServiceException", "Lambda.AWSLambdaException", "Lambda.SdkClientException"],
+          "IntervalSeconds": 2,
+          "MaxAttempts": 3,
+          "BackoffRate": 2
+        }
+      ],
+      "Catch": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "Next": "Audit",
+          "ResultPath": "$.error",
+          "ResultSelector": {
+            "status": "failed",
+            "reason.$": "$.error.Message"
+          }
+        }
+      ],
+      "Next": "ResolveObligations",
+      "ResultPath": "$.trip"
+    },
+    "ResolveObligations": {
+      "Type": "Task",
+      "Resource": "arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:aadesh-resolve-obligations",
+      "Retry": [
+        {
+          "ErrorEquals": ["Lambda.ServiceException", "Lambda.AWSLambdaException", "Lambda.SdkClientException"],
+          "IntervalSeconds": 2,
+          "MaxAttempts": 3,
+          "BackoffRate": 2
+        }
+      ],
+      "Catch": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "Next": "Audit",
+          "ResultPath": "$.error"
+        }
+      ],
+      "Next": "Authorize",
+      "ResultPath": "$.resolution"
+    },
+    "Authorize": {
+      "Type": "Task",
+      "Resource": "arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:aadesh-authorize-standing-order",
+      "Retry": [
+        {
+          "ErrorEquals": ["Lambda.ServiceException", "Lambda.AWSLambdaException", "Lambda.SdkClientException"],
+          "IntervalSeconds": 2,
+          "MaxAttempts": 3,
+          "BackoffRate": 2
+        }
+      ],
+      "Catch": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "Next": "Audit",
+          "ResultPath": "$.error"
+        }
+      ],
+      "Next": "CreateParchis",
+      "ResultPath": "$.authorization"
+    },
+    "CreateParchis": {
+      "Type": "Task",
+      "Resource": "arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:aadesh-create-parchis",
+      "Retry": [
+        {
+          "ErrorEquals": ["Lambda.ServiceException", "Lambda.AWSLambdaException", "Lambda.SdkClientException"],
+          "IntervalSeconds": 2,
+          "MaxAttempts": 3,
+          "BackoffRate": 2
+        }
+      ],
+      "Catch": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "Next": "Audit",
+          "ResultPath": "$.error"
+        }
+      ],
+      "Next": "PendingAck",
+      "ResultPath": "$.parchis"
+    },
+    "PendingAck": {
+      "Type": "Map",
+      "Iterator": {
+        "StartAt": "BuildItem",
+        "States": {
+          "BuildItem": {
+            "Type": "Pass",
+            "Parameters": {
+              "parchi_id.$": "$$.Map.Item.Value",
+              "worker_id.$": "$.worker_ids[$$.Map.Item.Index]",
+              "site_id.$": "$.site_id"
+            },
+            "Next": "AwaitWorkerAck"
+          },
+          "AwaitWorkerAck": {
+            "Type": "Task",
+            "Resource": "arn:aws:states:::lambda:invoke.waitForTaskToken",
+            "Parameters": {
+              "FunctionName": "arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:aadesh-parchi-ack-waiter",
+              "Payload": {
+                "parchi_id.$": "$.parchi_id",
+                "worker_id.$": "$.worker_id",
+                "site_id.$": "$.site_id",
+                "task_token.$": "$$.Task.Token"
+              }
+            },
+            "Retry": [
+              {
+                "ErrorEquals": ["Lambda.ServiceException", "Lambda.AWSLambdaException", "Lambda.SdkClientException"],
+                "IntervalSeconds": 2,
+                "MaxAttempts": 3,
+                "BackoffRate": 2
+              }
+            ],
+            "Catch": [
+              {
+                "ErrorEquals": ["States.ALL"],
+                "Next": "AckTimeout",
+                "ResultPath": "$.error"
+              }
+            ],
+            "End": true
+          },
+          "AckTimeout": {
+            "Type": "Pass",
+            "End": true,
+            "Result": {
+              "parchi_id.$": "$.parchi_id",
+              "acknowledged": false,
+              "reason": "worker did not acknowledge within the waiting window"
+            }
+          }
+        }
+      },
+      "ItemsPath": "$.parchi_ids",
+      "MaxConcurrency": 10,
+      "Retry": [],
+      "Next": "WorkerAcknowledgements",
+      "ResultPath": "$.ack_results"
+    },
+    "WorkerAcknowledgements": {
+      "Type": "Pass",
+      "Next": "SealParchis",
+      "ResultPath": "$.acknowledgements"
+    },
+    "SealParchis": {
+      "Type": "Task",
+      "Resource": "arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:aadesh-seal-parchis",
+      "Retry": [
+        {
+          "ErrorEquals": ["Lambda.ServiceException", "Lambda.AWSLambdaException", "Lambda.SdkClientException"],
+          "IntervalSeconds": 2,
+          "MaxAttempts": 3,
+          "BackoffRate": 2
+        }
+      ],
+      "Catch": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "Next": "Audit",
+          "ResultPath": "$.error"
+        }
+      ],
+      "Next": "Audit",
+      "ResultPath": "$.sealed"
+    },
+    "Audit": {
+      "Type": "Task",
+      "Resource": "arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:aadesh-standing-order-audit",
+      "Retry": [],
+      "Catch": [],
+      "End": true,
+      "ResultPath": "$.audit"
+    }
+  }
+}

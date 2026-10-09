@@ -13,14 +13,31 @@ how it survives a normal test run.
 
 from __future__ import annotations
 
+import os
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
 PORTS = ROOT / "services" / "aadesh_core" / "ports"
+
+# Windows requires a valid cwd for subprocess with empty PATH.
+# Use the system temp directory, which always exists.
+_WINDIR = Path(tempfile.gettempdir())
+
+
+# Windows CreateProcess needs SYSTEMROOT and COMSPEC even when PATH is empty.
+def _minimal_env() -> dict[str, str]:
+    return {
+        "PYTHONPATH": os.pathsep.join([str(ROOT / "services"), str(ROOT)]),
+        "PATH": "",
+        "SYSTEMROOT": os.environ.get("SYSTEMROOT", ""),
+        "COMSPEC": os.environ.get("COMSPEC", ""),
+    }
+
 
 PORT_MODULES = sorted(
     f"aadesh_core.ports.{p.stem}" for p in PORTS.glob("*.py") if p.stem != "__init__"
@@ -38,8 +55,8 @@ def test_a_port_imports_first_in_a_fresh_interpreter(module):
         [sys.executable, "-c", f"import {module}"],
         capture_output=True,
         text=True,
-        cwd=ROOT,
-        env={"PYTHONPATH": str(ROOT / "services"), "PATH": ""},
+        cwd=str(_WINDIR),
+        env=_minimal_env(),
     )
 
     assert result.returncode == 0, (

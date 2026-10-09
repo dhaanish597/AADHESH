@@ -198,28 +198,25 @@ def test_the_audit_step_is_the_terminus_of_the_successful_run(asl: dict) -> None
 # --- the known defect in the Map state ---------------------------------------
 
 
-@pytest.mark.xfail(
-    strict=False,
-    reason=(
-        "KNOWN DEFECT (pre-existing, Prompt 4 work, not introduced here). `PendingAck` declares "
-        "BOTH `Iterator` and `ItemProcessor`, which are mutually exclusive in ASL, and "
-        "`ItemProcessor.States.BuildItem.Next` targets `AwaitWorkerAck`, a state that only "
-        "exists inside the sibling `Iterator.States` and not inside its own. Correcting it means "
-        "editing an unrelated work-in-progress file, which this verification change is not "
-        "permitted to do. Left as XPASS bait: when the Map is fixed this test starts passing and "
-        "should be un-marked. See docs/verification.md, 'Known gaps'."
-    ),
-)
 def test_the_map_processor_declares_exactly_one_of_iterator_or_itemprocessor(asl: dict) -> None:
     pending = asl["States"]["PendingAck"]
 
-    assert not ("Iterator" in pending and "ItemProcessor" in pending), (
-        "PendingAck declares both Iterator and ItemProcessor"
+    # A valid Map state declares exactly one processing mode: Iterator (classic) or
+    # ItemProcessor (awl/lambda). Declaring both is invalid and the waiter is unreachable.
+    assert ("Iterator" in pending) != ("ItemProcessor" in pending), (
+        "PendingAck must declare exactly one of Iterator or ItemProcessor, not both and not neither"
     )
-    processor = pending["ItemProcessor"]["States"]
-    assert pending["ItemProcessor"]["StartAt"] in processor
+
+    if "Iterator" in pending:
+        processor = pending["Iterator"]["States"]
+        start = pending["Iterator"]["StartAt"]
+    else:
+        processor = pending["ItemProcessor"]["States"]
+        start = pending["ItemProcessor"]["StartAt"]
+
+    assert start in processor, f"{start!r} is not a state in the processor"
     for name, state in processor.items():
         if "Next" in state:
             assert state["Next"] in processor, (
-                f"ItemProcessor.{name} targets {state['Next']}, which is not in the processor"
+                f"{name}.Next targets {state['Next']!r}, which is not in the processor"
             )

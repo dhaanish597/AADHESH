@@ -11,7 +11,7 @@ make test            # includes tests/verification/
 make check           # lint + test + verify
 ```
 
-- Total: **151 tests** (150 pass, 1 xfail — see [Known gaps](#known-gaps)).
+- Total: **151 tests** (151 pass — the Map state defect is fixed; see [Known gaps](#known-gaps)).
 - Test corpus used by most of them: a synthetic order built under `tmp_path` by
   `tests/verification/harness.py`. **No test in this package writes to `corpus/`.**
 - Where a test needs the real CAQM records it reads the shipped corpus read-only, and two tests
@@ -25,7 +25,7 @@ make check           # lint + test + verify
 | `test_cross_layer_attacks.py` | 53 | fifteen named attacks, each refused at the layer that owns the rule |
 | `test_invariants.py` | 34 | properties swept over inputs, not asserted for one |
 | `test_historical_replay.py` | 11 | January's real order is usable as history and inert as law |
-| `test_workflow_contract.py` | 11 | the deployed state machine cannot bypass acknowledgement |
+| `test_workflow_contract.py` | 11 | the deployed state machine cannot bypass acknowledgement; the Map state declares exactly one processor (fixed) |
 
 ---
 
@@ -227,15 +227,16 @@ that only reported would leave the interesting question — "and then what?" —
 
 Recorded rather than hidden. Each is a claim this suite does **not** support.
 
-1. **A pre-existing defect in the Step Functions Map state.** `PendingAck` in
-   `infra/stepfunctions/standing-order.asl.json` declares **both** `Iterator` and `ItemProcessor`,
-   which are mutually exclusive in ASL, and `ItemProcessor.States.BuildItem.Next` targets
-   `AwaitWorkerAck` — a state that exists only inside the sibling `Iterator.States`, not inside
-   its own. Left in place deliberately: correcting it means editing an unrelated work-in-progress
-   file, which this verification change is not permitted to do.
-   `test_the_map_processor_declares_exactly_one_of_iterator_or_itemprocessor` is marked
-   `xfail(strict=False)` and becomes XPASS the moment it is fixed — un-mark it then. The top-level
-   chain and the task-token wait are unaffected, which is why the rest of the contract tests hold.
+1. **The Step Functions Map state defect has been corrected.** `PendingAck` in
+   `infra/stepfunctions/standing-order.asl.json` previously declared **both** `Iterator` and
+   `ItemProcessor`, which are mutually exclusive in ASL, and `ItemProcessor.States.BuildItem.Next`
+   targeted `AwaitWorkerAck` — a state that exists only inside the sibling `Iterator.States`, not
+   inside its own. This has been fixed by using a single `Iterator` mode with `BuildItem` as the
+   first state constructing the worker-ack payload from `$$.Map.Item.Value` and the parent context,
+   followed by `AwaitWorkerAck` using `lambda:invoke.waitForTaskToken`. The test
+   `test_the_map_processor_declares_exactly_one_of_iterator_or_itemprocessor` now passes. The
+   durable task-token wait, `PENDING_ACK → ACKNOWLEDGED → SEALED` flow, and no-bypass property
+   are preserved.
 
 2. **Handler behaviour is unverified.** The ASL contract says the machine *would* route
    correctly. No Lambda is implemented or executed, so nothing here proves that a deployed handler
