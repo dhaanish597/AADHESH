@@ -154,8 +154,42 @@ bundle of ports.
   so `make api` and `make test` are unchanged.
 - `services/aadesh_lambda/handlers/api.py` is an API Gateway skin injecting DynamoDB + S3 + OpenAQ.
 
-`Demo`'s process-local `self._payloads` dict becomes a `ParchiStore` query, because it does not
-survive a container.
+#### The roster QR payload cannot be looked up
+
+`Demo` holds `self._payloads` (worker_id → the `aadesh://ack/<raw>` string), minted once in
+`_open_parchis` and read by `roster_qr` and `cedar_supervisor_acknowledge`. It dies with the
+process, and **it cannot be replaced by a store query**:
+
+- `AcknowledgementToken` has no raw-token field, only `token_hash`, and the raw token is
+  `secrets.token_urlsafe(32)` — 256 bits of CSPRNG output, not derivable from any id.
+- `AcknowledgementTokenStore` exposes only `put` / `get(token_hash)` / `consume(token_hash)`,
+  and the in-memory adapter deliberately provides no `all()`, `for_worker()` or `for_parchi()`.
+- `Parchi.acknowledgement_token_ref` is `tok_` plus the first 16 hex of the hash, set only
+  after acknowledgement — a correlation handle, not a credential.
+
+This is the module's stated invariant, not an accident: `tokens.py` records that the raw token
+"is stored nowhere… A stolen database therefore yields no usable tokens."
+
+**So `_payloads` is deleted, and `/api/roster/qr` mints on demand** through
+`issue_acknowledgement_qr`, which the core documents as *"the 'show me the QR again' operation,
+and it is the only way to get a link other than the one creation returns."* It refuses anything
+not `PENDING_ACK`, so a sealed parchi can never be reached by a new link.
+
+Consequences, stated rather than discovered later:
+
+- Re-viewing the roster issues fresh links. That is the documented semantic of the operation,
+  and a previously issued link stays valid until its 24-hour TTL. It is not a correctness risk:
+  `IdempotencyLedger.execute_once` is keyed per parchi, so acknowledging twice is already
+  impossible no matter how many links exist.
+- `cedar_supervisor_acknowledge` obtains its payload the same way — by minting for that
+  worker's `PENDING_ACK` parchi — instead of reading the dict.
+- `create-parchis` still mints tokens in the workflow Lambda that nobody ever displays, because
+  `create_parchis_for_roster` returns them by contract. They expire unused. Suppressing that
+  would mean changing a core signature for an efficiency gain only, so it is recorded here and
+  left alone.
+
+Persisting the raw payload would have been the other way to keep the dict's behaviour, and it
+would have directly contradicted the invariant above. It is not a candidate.
 
 **Guard test:** both skins expose the same route set and produce the same response shape for
 the same injected ports — the same discipline `test_asl_matches_core_machine.py` already
