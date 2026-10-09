@@ -15,6 +15,7 @@ import json
 
 import pytest
 
+from aadesh_adapters.corpus.local_file import LocalFileCorpus
 from aadesh_cli.parchi import ParchiExit, run_demo
 from aadesh_web.server import Demo
 
@@ -97,6 +98,40 @@ def test_the_demo_shows_the_audit_trail_it_wrote(output):
 
     assert "ParchiAcknowledged" in text
     assert "ParchiSealed" in text
+
+
+def test_worker_view_exposes_only_the_verified_citations_attached_to_its_parchi():
+    application = Demo(corpus_root=CORPUS)
+    application.create_standing_order(scenario="replay")
+    qr = application.roster_qr(scenario="replay")
+    payload = next(item["payload"] for item in qr["workers"] if item["payload"])
+
+    view = application.worker_view(payload)
+    obligations = {
+        item.obligation_id: item for item in LocalFileCorpus(CORPUS).obligations()
+    }
+
+    assert view["citations"]
+    assert {item["obligation_id"] for item in view["citations"]} <= set(
+        view["obligation_ids"]
+    )
+    for citation in view["citations"]:
+        expected = obligations[citation["obligation_id"]].citation
+        assert citation["source_quote"] == expected.quote
+        assert citation["source_page"] == expected.page
+        assert citation["source_hash"] == expected.source_hash
+        assert citation["source_url"].startswith("https://caqm.nic.in/")
+
+
+def test_opening_the_roster_does_not_issue_parchis_or_mint_tokens():
+    application = Demo(corpus_root=CORPUS)
+
+    roster = application.roster_qr(scenario="replay")
+
+    assert len(roster["workers"]) == 34
+    assert roster["qr_minted"] == 0
+    assert all(worker["payload"] is None for worker in roster["workers"])
+    assert application.impact()["documented"] == 0
 
 
 def test_the_demo_shows_that_a_replay_writes_no_second_acknowledgement(output):

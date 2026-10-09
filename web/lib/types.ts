@@ -123,12 +123,14 @@ export type WorkerView = {
   status: string;
   parchi_id: string;
   site_id: string;
+  site_label?: string;
   worker_id: string;
   state: string;
   stage: number | null;
   provenance?: "measured" | "synthetic" | "replay" | null;
   cites_measured_data?: boolean;
   obligation_ids?: string[];
+  citations?: WorkerCitation[];
   entitlement_refs?: string[];
   readiness_checklist?: string[];
   displaced_worker_days?: number;
@@ -138,6 +140,16 @@ export type WorkerView = {
   acknowledged_at?: string | null;
   sealed_at?: string | null;
   content_hash?: string | null;
+};
+
+export type WorkerCitation = {
+  obligation_id: string;
+  source_doc: string;
+  source_title: string;
+  source_page: number;
+  source_quote: string;
+  source_hash: string;
+  source_url: string;
 };
 
 export type CedarDecision = {

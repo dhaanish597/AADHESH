@@ -49,9 +49,6 @@ through explicit historical scenario replay. AQI observations cannot activate a 
 See the [engine API, rule audit and limitations](docs/obligation-engine.md), and the
 [initial source audit](docs/corpus-audit.md).
 
-AQI ingestion, deployed workflows, Standing Orders, worker Parchis, model integrations and the
-frontend remain subsequent work. The foundation's test slice is not a finished application.
-
 ## Quickstart
 
 ```bash
@@ -263,6 +260,230 @@ revoked. It cannot establish a current stage without another verified order. His
 uses the September 2026 schedule as a scenario, because the November 2025 schedule referenced
 by the January orders is absent. The page 12 permissions also have an explicitly documented
 ambiguity; affected decisions remain `UNKNOWN`.
+
+---
+
+## AWS Deployment
+
+Aadesh deploys to AWS using a service-by-service architecture where every service has a real
+responsibility. No service is added merely to increase the service count.
+
+### AWS Resource Inventory
+
+| Resource | Service | Purpose | Responsibility |
+|----------|---------|---------|----------------|
+| **Amplify Hosting** | Frontend | Next.js app hosting with CI/CD | Serves the Next.js frontend, connects to API Gateway |
+| **API Gateway** | API | Single HTTP entry point | Routes requests to Lambda, Cognito authorizer |
+| **Lambda Functions** | Compute | Backend handlers | Thin adapters over aadesh_core (11 functions) |
+| **DynamoDB Tables** | Database | State persistence | Parchis, readings, standing orders, sites |
+| **S3 Bucket** | Storage | Corpus documents | Hashed CAQM order bytes — source of truth |
+| **Cognito User Pool** | Identity | User authentication | JWT tokens, role-based access |
+| **Cognito Domain** | Identity | Hosted UI (optional) | Sign-in/sign-out pages |
+| **Step Functions** | Workflow | Standing Order workflow | Durable workflow with waitForTaskToken |
+| **EventBridge** | Events | Scheduled events | Every-15-min AQI ingestion trigger |
+| **CloudWatch Logs** | Monitoring | Log aggregation | Lambda logs, Step Functions execution logs |
+| **CloudWatch Alarms** | Monitoring | Alerting | Error rate, latency alarms |
+| **CloudWatch Dashboard** | Monitoring | Operational view | Unified dashboard for ops |
+| **Bedrock** | AI | Explanation (opt-in) | Strands agent for plain-language explanations only |
+| **OpenSearch** | Search | Corpus indexing (opt-in) | Searchable citations for verification |
+
+### Detailed Resource Documentation
+
+#### 1. Amplify Hosting (Frontend)
+
+- **Resource**: Amplify App + Branch
+- **Purpose**: Host the Next.js frontend with automatic builds on git push
+- **Configuration**:
+  - Framework: Next.js (auto-detected)
+  - Build command: `npm run build`
+  - Output directory: `.next`
+  - Environment variables: API URL, Cognito config
+- **IAM Role**: Amplify service role for S3 build artifacts and CloudFront
+
+#### 2. API Gateway (REST API)
+
+- **Resource**: `AWS::Serverless::Api`
+- **Purpose**: Single HTTP entry point for frontend, Cognito authorizer
+- **Configuration**:
+  - Stage: `{environment}` (dev/staging/prod)
+  - CORS: Amplify domains only
+  - Auth: Cognito User Pools authorizer (default)
+- **Routes**:
+  - `/{proxy+}` → API Handler Lambda
+  - `/resolve` → Resolve Handler Lambda
+  - `/standing-order` → Standing Order Handler Lambda
+  - `/parchi/acknowledge` → Parchi Ack Handler Lambda
+
+#### 3. Lambda Functions (Backend)
+
+Sixteen Lambda functions, all Python 3.13, ARM64, 256MB (512MB for Parchi creation):
+
+| Function | Handler | Purpose |
+|----------|---------|---------|
+| `api_handler` | `aadesh_aws.api_handler.handle` | Main API — supervisor, roster, facilitator, verify, impact |
+| `ingest_handler` | `aadesh_aws.ingest_handler.handle` | EventBridge-triggered AQI ingestion |
+| `resolve_handler` | `aadesh_aws.resolve_handler.handle` | Pure deterministic obligation resolution |
+| `standing_order_handler` | `aadesh_aws.standing_order_handler.handle` | Create/manage Standing Orders |
+| `parchi_ack_handler` | `aadesh_aws.parchi_ack_handler.handle` | Worker acknowledges own Parchi |
+| `task_waiter` | `aadesh_aws.task_waiter.handle` | Step Functions waitForTaskToken — waits for ack |
+| `parchi_creation_handler` | `aadesh_aws.parchi_creation_handler.handle` | Create Parchis for all rostered workers |
+| `parchi_seal_handler` | `aadesh_aws.parchi_seal_handler.handle` | Seal acknowledged Parchis over content hash |
+| `audit_handler` | `aadesh_aws.audit_handler.handle` | Final audit record for Standing Order execution |
+| `stage_trip_handler` | `aadesh_aws.stage_trip_handler.handle` | Determine invoked stage from corpus |
+| `parchi_view_handler` | `aadesh_aws.parchi_view_handler.handle` | View Parchi details (for Cedar demo) |
+
+**IAM Policies**: Each Lambda has least-privilege IAM:
+- DynamoDB access only to its required tables
+- S3 read access only to corpus bucket
+- CloudWatch Logs write to its own log group
+- Bedrock access (opt-in only, when ExplainBackend=strands_bedrock)
+- Step Functions: start/describe execution (for workflow handlers)
+
+#### 4. DynamoDB Tables
+
+| Table | Purpose | Keys | GSIs | PITR |
+|-------|---------|------|------|------|
+| `parchis` | Parchi persistence | `parchi_id` (PK) | `site_id-index`, `worker_id-index`, `state-index` | Yes (prod) |
+| `readings` | AQI readings cache | `station_id` (PK), `observed_at` (SK) | — | No |
+| `standing-orders` | Standing Order records | `standing_order_id` (PK) | `site_id-index`, `supervisor_id-index` | Yes (prod) |
+| `sites` | Construction site profiles | `site_id` (PK) | — | No |
+
+All tables: PAY_PER_REQUEST billing, AES-256 encryption at rest.
+
+#### 5. S3 Bucket (Corpus)
+
+- **Resource**: `AWS::S3::Bucket`
+- **Purpose**: Store hashed CAQM order PDF bytes, keyed by SHA-256
+- **Configuration**:
+  - Versioning: Enabled
+  - Encryption: AES-256 (SSE-S3)
+  - Public access: Blocked (all four block settings)
+  - Bucket policy: Deny unencrypted transport
+- **Contents**: `corpus/sources/*.pdf`, `corpus/sources/*.txt` (extracted page text)
+
+#### 6. Cognito User Pool
+
+- **Resource**: `AWS::Cognito::UserPool`
+- **Purpose**: User authentication for frontend
+- **Configuration**:
+  - Username: email
+  - Auto-verified: email
+  - MFA: Off (can be enabled for prod)
+  - Schema: `role` (String), `assigned_site` (String)
+  - Password policy: 12 chars, upper/lower/number/symbol required
+- **App Client**: `aadesh-web` — SRP auth, refresh tokens, OAuth code flow
+- **Domain**: `{stack-name}-auth` (dev) or custom domain (prod)
+
+#### 7. Step Functions State Machine
+
+- **Resource**: `AWS::Serverless::StateMachine`
+- **Purpose**: Durable Standing Order workflow
+- **Type**: STANDARD (not Express — needs waitForTaskToken)
+- **Workflow**:
+  ```
+  StageTrip → ResolveObligations → Authorize → CreateParchis → PendingAck
+                                                   ↓
+                                        (Map: foreach parchi)
+                                                   ↓
+                                        AwaitWorkerAck (waitForTaskToken)
+                                                   ↓
+                                        WorkerAcknowledgements → SealParchis → Audit
+  ```
+- **Logging**: ALL levels to CloudWatch Logs
+- **Tracing**: X-Ray enabled
+
+#### 8. EventBridge Rules
+
+| Rule | Schedule/Event | Target | Purpose |
+|------|---------------|--------|---------|
+| `standing-order-events` | `aadesh.events` → `StageInvocation` | Step Functions | Trigger workflow when stage invoked |
+| `IngestHandler.Every15Minutes` | rate(15 minutes) | Ingest Lambda | Scheduled AQI ingestion |
+
+#### 9. CloudWatch
+
+**Log Groups**:
+- `/aws/lambda/{stack}-api`
+- `/aws/lambda/{stack}-ingest`
+- `/aws/lambda/{stack}-resolve`
+- `/aws/lambda/{stack}-standing-order`
+- `/aws/lambda/{stack}-parchi-ack`
+- `/aws/lambda/{stack}-task-waiter`
+- `/aws/lambda/{stack}-create-parchis`
+- `/aws/lambda/{stack}-seal-parchis`
+- `/aws/lambda/{stack}-audit`
+- `/aws/lambda/{stack}-stage-trip`
+- `/aws/states/{stack}-standing-order`
+
+**Alarms**:
+- `ApiErrorsAlarm`: API Lambda errors > 5 in 5 minutes
+- `LambdaDurationAlarm`: API Lambda p95 > 25s for 3 periods
+
+**Dashboard**: Unified dashboard with API errors, Lambda metrics, SFN logs, DynamoDB throughput
+
+#### 10. Bedrock (opt-in)
+
+- **Purpose**: AI explanations only, outside enforcement path
+- **Configuration**:
+  - Model: `amazon.nova-lite-v1` or `anthropic.claude-sonnet-4-5-20250827-v1`
+  - Temperature: 0.1 (explanation should be deterministic)
+  - Max tokens: 1024
+- **IAM**: Bedrock `InvokeModel` on specific models only
+- **Fallback**: Always falls back to deterministic explanation on any failure
+
+#### 11. OpenSearch (opt-in)
+
+- **Resource**: `AWS::OpenSearchService::Domain`
+- **Purpose**: Indexed corpus pages for search-backed verification
+- **Configuration**:
+  - Engine: OpenSearch 2.11
+  - Instance: t3.small.search (1 node)
+  - Encryption: At rest + node-to-node
+  - HTTPS enforced, TLS 1.2 minimum
+  - Access: Lambda execution role only
+- **IAM**: `es:ESHttp*` on domain ARN only
+
+### Infrastructure as Code
+
+All AWS resources are defined in:
+
+```
+infra/aws/
+├── template.yaml          # SAM template — all resources
+├── README.md             # Deployment documentation
+├── LOCAL_DEV.md          # Local development with LocalStack
+└── stepfunctions/
+    └── standing-order.asl.json  # Step Functions workflow definition
+```
+
+### Deployment Commands
+
+```bash
+# Build and deploy backend
+cd infra/aws
+sam build --use-container
+sam deploy --guided
+
+# Deploy frontend to Amplify
+cd web
+amplify init
+amplify add hosting
+amplify publish
+```
+
+### Environment Variables
+
+All environment variables are documented in [.env.example](../.env.example).
+
+Production secrets must be stored in:
+- **AWS Secrets Manager**: QR signing key, API keys
+- **SSM Parameter Store**: Non-sensitive configuration
+
+### Deployment Documentation
+
+Full deployment guide: [infra/aws/README.md](infra/aws/README.md)
+Local development guide: [infra/aws/LOCAL_DEV.md](infra/aws/LOCAL_DEV.md)
+
+---
 
 ## Licence and attributions
 

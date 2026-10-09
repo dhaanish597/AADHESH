@@ -29,11 +29,11 @@ const plexMono = IBM_Plex_Mono({
 
 export const metadata: Metadata = {
   title: {
-    default: "Aadesh — GRAP compliance execution",
-    template: "%s — Aadesh",
+    default: "AADHESH — Environmental operations",
+    template: "%s — AADHESH",
   },
   description:
-    "A pollution-control execution layer for Delhi-NCR construction sites under GRAP. Not an AQI dashboard.",
+    "From environmental order to verified action. AADHESH connects official restrictions, site obligations and worker acknowledgement through a verifiable evidence trail.",
   manifest: "/manifest.json",
   icons: {
     icon: "/icon.svg",

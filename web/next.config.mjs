@@ -9,6 +9,8 @@ const nextConfig = {
   // This repo has more than one lockfile; pin the tracing root to the web app. Scoped here so
   // Next does not stray into the parent workspace when collecting build traces.
   outputFileTracingRoot: process.cwd(),
+  // Allow isolated local verification builds while the normal .next dev server is running.
+  distDir: process.env.AADHESH_NEXT_DIST_DIR ?? ".next",
   async rewrites() {
     return [{ source: "/api/:path*", destination: `${API}/api/:path*` }];
   },

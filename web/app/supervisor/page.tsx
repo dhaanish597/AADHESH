@@ -84,15 +84,13 @@ function ObligationCard({ obligation }: { obligation: Obligation }) {
           <div className="mb-2 flex flex-wrap items-center gap-2">
             <Pill tone={view.tone}>{view.label}</Pill>
             {obligation.issues_parchi && <Pill tone="info">Parchi</Pill>}
-            <span className="data text-[12px] text-faint">{obligation.obligation_id}</span>
           </div>
           <h3 className="text-sm font-semibold leading-snug text-ink">{obligation.label}</h3>
           <p className="mt-2 text-sm leading-relaxed text-dim">{obligation.required_action}</p>
           <p className="mt-2 text-xs leading-relaxed text-faint">{obligation.reason}</p>
         </div>
         <div className="shrink-0 text-right">
-          <div className="label">Clause</div>
-          <div className="data text-[12px] text-dim">{obligation.source_doc}</div>
+          <div className="label">Official source</div>
           <div className="data text-[12px] text-faint">page {obligation.source_page}</div>
           <button
             type="button"
@@ -134,6 +132,14 @@ function ObligationCard({ obligation }: { obligation: Obligation }) {
               </div>
             </details>
           )}
+          <details className="border-t border-line pt-3">
+            <summary className="cursor-pointer text-xs text-faint">Technical citation details</summary>
+            <dl className="mt-2">
+              <KeyValue k="Rule reference">{obligation.obligation_id}</KeyValue>
+              <KeyValue k="Source document">{obligation.source_doc}</KeyValue>
+              <KeyValue k="SHA-256">{shortHash(obligation.source_hash)}</KeyValue>
+            </dl>
+          </details>
         </div>
       )}
     </article>
@@ -141,7 +147,7 @@ function ObligationCard({ obligation }: { obligation: Obligation }) {
 }
 
 export default function SupervisorPage() {
-  const [scenario, setScenario] = useState<Scenario>("replay");
+  const [scenario, setScenario] = useState<Scenario>("current");
   const [reading, setReading] = useState<ReadingKey>("aligned");
   const [data, setData] = useState<SupervisorPayload | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -149,6 +155,9 @@ export default function SupervisorPage() {
   const [showAll, setShowAll] = useState(false);
   const [workers, setWorkers] = useState<QrWorker[] | null>(null);
   const [qrBusy, setQrBusy] = useState(false);
+  const [workerQuery, setWorkerQuery] = useState("");
+  const [workerFilter, setWorkerFilter] = useState<"all" | "pending" | "acknowledged" | "documentation" | "issued">("all");
+  const [selectedWorkerId, setSelectedWorkerId] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
   const load = useCallback(async (sc: Scenario, rd: ReadingKey) => {
@@ -169,6 +178,10 @@ export default function SupervisorPage() {
   }, [scenario, reading, load]);
 
   const createOrder = async () => {
+    if (!replayCanRun) {
+      setNotice("Preview only: no active official Stage III invocation is available in the current corpus.");
+      return;
+    }
     setBusy(true);
     setError(null);
     setNotice(null);
@@ -179,7 +192,7 @@ export default function SupervisorPage() {
       );
       await load(scenario, reading);
       await loadQr();
-      setNotice("Standing Order signed, activated and worker parchis opened.");
+      setNotice("Historical replay ran locally: the Standing Order was authorized, and demo Parchis were opened.");
       void res;
     } catch (err) {
       setError((err as Error).message);
@@ -200,28 +213,6 @@ export default function SupervisorPage() {
     }
   };
 
-  const acknowledgeAll = async () => {
-    if (!workers) return;
-    setQrBusy(true);
-    setError(null);
-    try {
-      for (const w of workers) {
-        if (!w.payload || (w.state && w.state !== "pending_ack")) continue;
-        await postJson("/api/worker/acknowledge", {
-          payload: w.payload,
-          worker_id: w.worker_id,
-        });
-      }
-      await loadQr();
-      await load(scenario, reading);
-      setNotice("Remaining workers simulated their own scan + confirm.");
-    } catch (err) {
-      setError((err as Error).message);
-    } finally {
-      setQrBusy(false);
-    }
-  };
-
   const obligations = useMemo(() => {
     if (!data) return [];
     const applicable = data.obligations.filter((o) => o.applicable === true);
@@ -231,6 +222,19 @@ export default function SupervisorPage() {
 
   const order = data?.standing_order;
   const orderActive = order && order.projected_status === "active";
+  const replayCanRun = data?.mode === "REPLAY" && data.official_stage !== "NONE";
+  const selectedWorker = workers?.find((worker) => worker.worker_id === selectedWorkerId) ?? null;
+  const visibleWorkers = workers?.filter((worker) => {
+    const query = workerQuery.trim().toLocaleLowerCase();
+    const matchesQuery = !query || worker.display_name.toLocaleLowerCase().includes(query) || worker.worker_id.toLocaleLowerCase().includes(query);
+    const acknowledged = worker.state === "acknowledged" || worker.state === "sealed";
+    const matchesFilter = workerFilter === "all"
+      || (workerFilter === "pending" && !acknowledged)
+      || (workerFilter === "acknowledged" && acknowledged)
+      || (workerFilter === "documentation" && !worker.registered)
+      || (workerFilter === "issued" && Boolean(worker.parchi_id));
+    return matchesQuery && matchesFilter;
+  }) ?? [];
 
   return (
     <div className="mx-auto max-w-5xl px-5 py-8 lg:px-10 lg:py-10">
@@ -251,7 +255,7 @@ export default function SupervisorPage() {
             onChange={(v) => setScenario(v)}
             options={[
               { value: "replay", label: "Stage III replay" },
-              { value: "current", label: "Live corpus" },
+              { value: "current", label: "Current corpus" },
             ]}
           />
           <Segmented
@@ -433,42 +437,74 @@ export default function SupervisorPage() {
           {/* ---------------------------------------------------- standing order */}
           <Panel
             title="Standing Order"
-            subtitle="A signed, narrow, time-bounded pre-commitment — not an autonomous permission."
+            subtitle="One site · exact Stage III trigger · explicit halt and Parchi actions · seven-day validity. No arbitrary code or agent instructions."
             actions={
               order ? (
-                <Pill tone={orderActive ? "ok" : "neutral"}>{order.projected_status}</Pill>
+                <Pill tone={orderActive ? "ok" : "neutral"}>{orderActive ? "PRE-COMMITMENT ARMED" : order.projected_status}</Pill>
               ) : (
                 <Pill tone="neutral">Not created</Pill>
               )
             }
           >
             {order ? (
-              <div className="grid gap-3 lg:grid-cols-2">
-                <dl>
-                  <KeyValue k="Order id">{order.standing_order_id}</KeyValue>
-                  <KeyValue k="Trigger">{stageName(order.trigger.stage)} · {order.trigger.match}</KeyValue>
-                  <KeyValue k="Actions">
-                    {order.actions.map((a) => a.action).join(" + ")}
-                  </KeyValue>
-                  <KeyValue k="Expires">{formatInstant(order.valid_until)}</KeyValue>
-                </dl>
-                <dl>
-                  <KeyValue k="Signed by">{order.supervisor_id}</KeyValue>
-                  <KeyValue k="Signed at">{formatInstant(order.signed_at)}</KeyValue>
-                  <KeyValue k="Commitment hash">{shortHash(order.commitment_hash)}</KeyValue>
-                  <KeyValue k="Trigger fingerprint">{shortHash(order.trigger_fingerprint ?? null)}</KeyValue>
-                </dl>
-              </div>
+              <>
+                <div className="grid gap-3 lg:grid-cols-2">
+                  <dl>
+                    <KeyValue k="Trigger">{stageName(order.trigger.stage)} · {order.trigger.match}</KeyValue>
+                    <KeyValue k="Actions">
+                      {order.actions.map((a) => a.action).join(" + ")}
+                    </KeyValue>
+                    <KeyValue k="Valid from">{formatInstant(order.valid_from)}</KeyValue>
+                    <KeyValue k="Expires">{formatInstant(order.valid_until)}</KeyValue>
+                  </dl>
+                </div>
+                <details className="mt-3 border-t border-line pt-3">
+                  <summary className="cursor-pointer text-xs text-faint">Technical commitment details</summary>
+                  <dl className="mt-2">
+                    <KeyValue k="Order reference">{order.standing_order_id}</KeyValue>
+                    <KeyValue k="Site reference">{order.site_id}</KeyValue>
+                    <KeyValue k="Supervisor reference">{order.supervisor_id}</KeyValue>
+                    <KeyValue k="Signed at">{formatInstant(order.signed_at)}</KeyValue>
+                    <KeyValue k="Commitment hash">{shortHash(order.commitment_hash)}</KeyValue>
+                    <KeyValue k="Trigger fingerprint">{shortHash(order.trigger_fingerprint ?? null)}</KeyValue>
+                  </dl>
+                </details>
+                <div className="mt-5 border-t border-line pt-4">
+                  <h3 className="label">Standing Order lifecycle · {order.projected_status}</h3>
+                  <ol className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                    {[
+                      ["draft", "Draft", "Written, not yet signed"],
+                      ["confirmed", "Signed", "Commitment fixed by supervisor"],
+                      ["active", "Pre-commitment", "Eligible for its exact official trigger"],
+                      ["triggered", "Triggered", "Official invocation matched"],
+                      ["completed", "Completed", "Workflow reached its audit step"],
+                      ["expired", "Expired", "Validity window ended"],
+                    ].map(([state, title, detail]) => {
+                      const current = order.projected_status.toLowerCase() === state;
+                      return (
+                        <li key={state} aria-current={current ? "step" : undefined} className={`border p-3 ${current ? "border-accent bg-accent/10" : "border-line bg-panelAlt"}`}>
+                          <span className="flex items-center gap-2">
+                            <span className={`grid h-5 w-5 place-items-center rounded-full border text-[10px] ${current ? "border-accent text-accent" : "border-lineStrong text-faint"}`}>{current ? "•" : ""}</span>
+                            <strong className={`text-sm ${current ? "text-accent" : "text-ink"}`}>{title}</strong>
+                          </span>
+                          <span className="mt-2 block pl-7 text-xs leading-relaxed text-dim">{detail}</span>
+                        </li>
+                      );
+                    })}
+                  </ol>
+                  <p className="mt-3 text-xs text-faint">Expiry is computed from the validity window. It can close an order from any non-terminal phase; no revocation transition is offered by the current backend.</p>
+                </div>
+              </>
             ) : (
               <div className="flex flex-wrap items-center justify-between gap-4">
                 <p className="text-sm text-dim">
-                  Pre-commit now so a verified Stage {stageName(3).replace("Stage ", "")} invocation
-                  fires the dust-work halt and opens one parchi per rostered worker without waiting
-                  on the supervisor.
+                  {replayCanRun
+                    ? "Local in-memory demonstration only. The bundled Stage III record is historical and revoked; running this replay shows the authorization and Parchi flow without creating a current restriction."
+                    : "Preview only. The current corpus has no active Stage III invocation, so this local action stays disabled."}
                 </p>
-                <Button onClick={createOrder} disabled={busy}>
+                <Button onClick={createOrder} disabled={busy || !replayCanRun}>
                   <IconShield className="h-4 w-4" />
-                  {busy ? "Signing…" : "Issue / activate Standing Order"}
+                  {busy ? "Signing…" : replayCanRun ? "Run Stage III replay demo" : "Preview only"}
                 </Button>
               </div>
             )}
@@ -496,77 +532,118 @@ export default function SupervisorPage() {
           <Panel
             title="Worker impact"
             subtitle="Displacement is documented, not priced. The corpus establishes no monetary amount."
+            actions={<Pill tone="warn">Demonstration roster</Pill>}
           >
-            <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+            <div className="grid gap-2 sm:grid-cols-2">
               {[
-                { k: "Workers affected", v: data.impact.affected },
-                { k: "Parchis created", v: data.impact.documented },
-                { k: "Acknowledged", v: `${data.impact.acknowledged}/${data.impact.documented || data.impact.affected}` },
-                { k: "Claim readiness", v: `${data.impact.readiness_ready}/${data.impact.readiness_total}` },
-              ].map((m) => (
-                <div key={m.k} className="border border-line bg-panelAlt p-3">
-                  <div className="font-mono text-2xl font-semibold text-ink">{m.v}</div>
-                  <div className="label mt-1">{m.k}</div>
-                </div>
-              ))}
+                { label: "Rostered workers", value: `${data.impact.affected}`, detail: "Current demonstration roster", count: data.impact.affected, total: data.impact.affected, filter: "all" as const },
+                { label: "Parchis issued", value: `${data.impact.documented} / ${data.impact.affected}`, detail: "Individual instruction records", count: data.impact.documented, total: data.impact.affected, filter: "issued" as const },
+                { label: "Acknowledged", value: `${data.impact.acknowledged} / ${data.impact.documented || data.impact.affected}`, detail: "Confirmed by the named worker", count: data.impact.acknowledged, total: data.impact.documented || data.impact.affected, filter: "acknowledged" as const },
+                { label: "Registration documented", value: `${data.impact.readiness_ready} / ${data.impact.readiness_total}`, detail: "Records ready for claim assistance", count: data.impact.readiness_ready, total: data.impact.readiness_total, filter: "documentation" as const },
+              ].map((metric) => {
+                const percent = metric.total > 0 ? Math.round((metric.count / metric.total) * 100) : 0;
+                return (
+                  <button
+                    key={metric.label}
+                    type="button"
+                    onClick={async () => {
+                      setWorkerFilter(metric.filter);
+                      setWorkerQuery("");
+                      if (!workers) await loadQr();
+                      document.getElementById("worker-roster")?.scrollIntoView({ behavior: "smooth", block: "start" });
+                    }}
+                    className="group border border-line bg-panelAlt p-4 text-left transition-colors hover:border-accent focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
+                    aria-label={`Show workers: ${metric.label}, ${metric.value}`}
+                  >
+                    <span className="flex items-baseline justify-between gap-2">
+                      <span className="label">{metric.label}</span>
+                      <span className="font-mono text-xl font-semibold tabular text-ink">{metric.value}</span>
+                    </span>
+                    <span className="mt-3 block h-1.5 overflow-hidden bg-black/20" aria-hidden="true">
+                      <span className="block h-full bg-accent transition-[width]" style={{ width: `${percent}%` }} />
+                    </span>
+                    <span className="mt-2 flex items-center justify-between gap-2 text-xs text-dim">
+                      <span>{metric.detail}</span><span>{percent}% · view list</span>
+                    </span>
+                  </button>
+                );
+              })}
             </div>
             <p className="mt-3 text-xs text-faint">
-              “Claim readiness” counts workers with a registration number on file — a
+              Registration documentation counts workers with a registration number on file — a
               documentation measure. It is not a claim that anyone is entitled to any sum. No
               rupee figure is shown because the verified corpus establishes none; worker count is
               never multiplied into an amount.
             </p>
           </Panel>
 
-          {/* ---------------------------------------------------- QR grid */}
+          {/* ---------------------------------------------------- searchable roster */}
           {workers && (
+            <div id="worker-roster" className="scroll-mt-24">
             <Panel
-              title="Worker acknowledgement — QR grid"
-              subtitle="Each code carries an opaque token and nothing else. A worker scans, then confirms."
-              actions={
-                <Button variant="secondary" onClick={acknowledgeAll} disabled={qrBusy}>
-                  {qrBusy ? "Working…" : "Simulate remaining scans"}
-                </Button>
-              }
+              title="Worker roster"
+              subtitle="Find a worker, review their documentation and acknowledgement state, then show that worker their one-time QR. A supervisor cannot acknowledge on a worker’s behalf."
             >
-              <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6">
-                {workers.map((w) => {
-                  const acked = w.state === "acknowledged" || w.state === "sealed";
+              <div className="flex flex-wrap gap-2" role="group" aria-label="Filter workers">
+                {([
+                  ["all", `All workers · ${workers.length}`],
+                  ["pending", `Awaiting acknowledgement · ${workers.filter((w) => w.state !== "acknowledged" && w.state !== "sealed").length}`],
+                  ["acknowledged", `Acknowledged · ${workers.filter((w) => w.state === "acknowledged" || w.state === "sealed").length}`],
+                  ["documentation", `Documentation missing · ${workers.filter((w) => !w.registered).length}`],
+                  ["issued", `Parchis issued · ${workers.filter((w) => Boolean(w.parchi_id)).length}`],
+                ] as const).map(([filter, label]) => (
+                  <button key={filter} type="button" aria-pressed={workerFilter === filter} onClick={() => setWorkerFilter(filter)} className={`border px-3 py-2 text-xs transition-colors ${workerFilter === filter ? "border-accent bg-accent/10 text-accent" : "border-line text-dim hover:text-ink"}`}>
+                    {label}
+                  </button>
+                ))}
+              </div>
+              <label className="mt-4 block">
+                <span className="sr-only">Search workers by name or reference</span>
+                <input value={workerQuery} onChange={(event) => setWorkerQuery(event.target.value)} placeholder="Search the roster" className="w-full border border-line bg-panelAlt px-3 py-2.5 text-sm text-ink placeholder:text-faint focus:border-accent focus:outline-none" />
+              </label>
+              <div className="mt-3 divide-y divide-line border-y border-line">
+                {visibleWorkers.map((worker) => {
+                  const acked = worker.state === "acknowledged" || worker.state === "sealed";
+                  const selected = worker.worker_id === selectedWorkerId;
                   return (
-                    <div
-                      key={w.worker_id}
-                      className={`border p-2 text-center ${
-                        acked ? "border-success/50 bg-success/5" : "border-line bg-panelAlt"
-                      }`}
-                    >
-                      <div className="mb-2 flex items-center justify-between px-1">
-                        <span className="data text-[11px] text-dim">{w.worker_id}</span>
-                        {acked ? (
-                          <IconCheck className="h-3.5 w-3.5 text-success" />
-                        ) : (
-                          <span className="label">{w.registered ? "reg" : "—"}</span>
-                        )}
-                      </div>
-                      {w.payload ? (
-                        <Link
-                          href={`/worker?payload=${encodeURIComponent(w.payload)}`}
-                          className="block"
-                          title="Open this worker's parchi screen as if scanned"
-                        >
-                          <div className="mx-auto w-fit">
-                            <Qr value={w.payload} alt={`Acknowledgement QR for ${w.worker_id}`} />
-                          </div>
-                        </Link>
-                      ) : (
-                        <div className="grid h-[148px] place-items-center border border-line text-xs text-faint">
-                          link issued
+                    <div key={worker.worker_id} className={`flex flex-wrap items-center justify-between gap-3 py-3 ${selected ? "bg-accent/5" : ""}`}>
+                      <div className="min-w-0">
+                        <div className="font-medium text-ink">{worker.display_name}</div>
+                        <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs text-dim">
+                          <span>{acked ? "Parchi acknowledged" : worker.payload ? "Awaiting acknowledgement" : "No Parchi link"}</span>
+                          <span>{worker.registered ? "Registration documented" : "Registration details missing"}</span>
                         </div>
-                      )}
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {worker.payload ? (
+                          <Button variant={selected ? "secondary" : "ghost"} onClick={() => setSelectedWorkerId(selected ? null : worker.worker_id)}>
+                            {selected ? "Close QR" : "Show worker QR"}
+                          </Button>
+                        ) : <span className="text-xs text-faint">QR unavailable</span>}
+                        <details className="text-xs text-faint">
+                          <summary className="cursor-pointer">Details</summary>
+                          <span className="data mt-2 block">{worker.worker_id} · {worker.parchi_id ?? "No Parchi reference"}</span>
+                        </details>
+                      </div>
                     </div>
                   );
                 })}
+                {visibleWorkers.length === 0 && <p className="py-8 text-center text-sm text-dim">No workers match this search.</p>}
               </div>
+              {selectedWorker?.payload && (
+                <div className="mt-5 flex flex-col items-center gap-3 border border-line bg-panelAlt p-5 text-center" aria-live="polite">
+                  <h3 className="font-semibold text-ink">Show this one-time code to {selectedWorker.display_name}</h3>
+                  <p className="max-w-md text-xs leading-relaxed text-dim">The worker opens their own Parchi and confirms it themselves. This QR contains an opaque token; its value is not displayed here.</p>
+                  <Qr value={typeof window === "undefined" ? "" : `${window.location.origin}/worker#payload=${encodeURIComponent(selectedWorker.payload)}`} alt={`One-time Parchi link for ${selectedWorker.display_name}`} />
+                </div>
+              )}
+              <p className="mt-3 text-xs text-faint">This is the local demonstration roster. Registration documentation does not establish financial entitlement.</p>
             </Panel>
+            </div>
+          )}
+
+          {workers && workers.length === 0 && (
+            <p className="text-sm text-dim">No worker records are available in this scenario.</p>
           )}
 
           <details className="border border-line bg-panel p-4">

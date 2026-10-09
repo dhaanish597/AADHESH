@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { getJson } from "@/lib/api";
 import { formatInstant, formatDate, stageName } from "@/lib/format";
 import type { PublicImpactPayload } from "@/lib/types";
@@ -127,7 +127,7 @@ export default function ImpactPage() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
-  const load = async () => {
+  const load = useCallback(async () => {
     setBusy(true);
     setError(null);
     try {
@@ -137,7 +137,7 @@ export default function ImpactPage() {
     } finally {
       setBusy(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     void load();

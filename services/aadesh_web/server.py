@@ -627,6 +627,33 @@ class Demo:
             displaced_worker_days=1,
         )
 
+    def _worker_citations(self, obligation_ids: list[str] | tuple[str, ...]) -> list[dict[str, Any]]:
+        """Return only the verified corpus citations attached to this worker's Parchi."""
+        corpus = LocalFileCorpus(self.corpus_root)
+        obligations = {item.obligation_id: item for item in corpus.obligations()}
+        documents = {item.doc_id: item for item in corpus.documents()}
+        citations: list[dict[str, Any]] = []
+        for obligation_id in obligation_ids:
+            obligation = obligations.get(obligation_id)
+            if obligation is None or obligation.source_state.value != "verified":
+                continue
+            citation = obligation.citation
+            document = documents.get(citation.source_doc)
+            if document is None or document.sha256 != citation.source_hash:
+                continue
+            citations.append(
+                {
+                    "obligation_id": obligation_id,
+                    "source_doc": citation.source_doc,
+                    "source_title": document.title,
+                    "source_page": citation.page,
+                    "source_quote": citation.quote,
+                    "source_hash": citation.source_hash,
+                    "source_url": document.source_url,
+                }
+            )
+        return citations
+
     def _open_parchis(self, result: ResolutionResult, *, now: datetime) -> None:
         execution = WorkflowExecution(
             execution_id="exec-demo-001",
@@ -649,8 +676,6 @@ class Demo:
 
     def roster_qr(self, *, scenario: str = "replay") -> dict[str, Any]:
         with self._lock:
-            if not self._opened:
-                self._open_parchis(self.resolve(scenario=scenario), now=datetime.now(UTC))
             items = []
             for entry in self.roster.active_entries():
                 parchi = self.store.get(f"parchi:exec-demo-001:{entry.worker_id}")
@@ -676,12 +701,14 @@ class Demo:
                 "status": "PENDING",
                 "parchi_id": view.parchi_id,
                 "site_id": view.site_id,
+                "site_label": SITE_LABEL,
                 "worker_id": view.worker_id,
                 "state": view.state.value,
                 "stage": view.stage,
                 "provenance": view.provenance.value if view.provenance else None,
                 "cites_measured_data": view.cites_measured_data,
                 "obligation_ids": list(view.obligation_ids),
+                "citations": self._worker_citations(view.obligation_ids),
                 "entitlement_refs": list(view.entitlement_refs),
                 "readiness_checklist": list(view.readiness_checklist),
                 "displaced_worker_days": view.displaced_worker_days,
@@ -697,9 +724,11 @@ class Demo:
                 "status": "ACKNOWLEDGED" if parchi.acknowledged_at else parchi.state.value.upper(),
                 "parchi_id": parchi.parchi_id,
                 "site_id": parchi.site_id,
+                "site_label": SITE_LABEL,
                 "worker_id": parchi.worker_id,
                 "state": parchi.state.value,
                 "stage": parchi.stage.stage if parchi.stage else None,
+                "citations": self._worker_citations(parchi.obligation_ids),
                 "acknowledged_at": (
                     parchi.acknowledged_at.isoformat() if parchi.acknowledged_at else None
                 ),
@@ -950,9 +979,6 @@ class Handler(BaseHTTPRequestHandler):
             self._send(200, demo.impact())
         elif path == "/api/roster/qr":
             self._send(200, demo.roster_qr(scenario=query.get("scenario", "replay")))
-        elif path == "/api/worker":
-            payload = query.get("payload", "")
-            self._send(200, demo.worker_view(payload))
         elif path == "/api/facilitator":
             self._send(200, demo.facilitator())
         elif path == "/api/verify":
@@ -969,6 +995,8 @@ class Handler(BaseHTTPRequestHandler):
             self._send(200, {"standing_order": order, "impact": demo.impact()})
         elif path == "/api/roster/qr":
             self._send(200, demo.roster_qr(scenario=body.get("scenario", "replay")))
+        elif path == "/api/worker/view":
+            self._send(200, demo.worker_view(str(body.get("payload", ""))))
         elif path == "/api/worker/acknowledge":
             self._send(
                 200,
