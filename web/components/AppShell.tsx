@@ -1,13 +1,39 @@
-import Link from "next/link";
+"use client";
 
-const NAV = [
-  { href: "/#system-map", label: "Product" },
-  { href: "/#how-it-works", label: "How it works" },
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+
+import { SessionBadge } from "@/components/SessionBadge";
+
+interface NavItem {
+  href: string;
+  label: string;
+  roles?: string[];
+}
+
+const DESKTOP_NAV: NavItem[] = [
+  { href: "/site", label: "Site" },
+  { href: "/#how-it-works", label: "Missions" },
+  { href: "/#journeys", label: "Workers" },
   { href: "/#evidence", label: "Evidence" },
-  { href: "/#journeys", label: "Worker impact" },
+  { href: "/supervisor", label: "Orders" },
+];
+
+const BOTTOM_NAV: NavItem[] = [
+  { href: "/", label: "Site" },
+  { href: "/supervisor", label: "Orders" },
+  { href: "/worker", label: "My Parchi" },
+  { href: "/facilitator", label: "Assistance" },
 ];
 
 export function AppShell({ children }: { children: React.ReactNode }) {
+  const pathname = usePathname();
+
+  const activeLink = (href: string) => {
+    if (href.startsWith("/#") && pathname === "/") return true;
+    return pathname === href || pathname.startsWith(href + "/");
+  };
+
   return (
     <div className="site-root">
       <header className="site-header">
@@ -16,11 +42,33 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <span>AADHESH</span>
         </Link>
         <nav className="site-nav" aria-label="Primary navigation">
-          {NAV.map((item) => <Link key={item.href} href={item.href}>{item.label}</Link>)}
+          {DESKTOP_NAV.map((item) => (
+            <Link
+              key={item.href}
+              href={item.href}
+              className={activeLink(item.href) ? "site-nav-link site-nav-link-active" : "site-nav-link"}
+            >
+              {item.label}
+            </Link>
+          ))}
         </nav>
-        <Link className="header-cta" href="/supervisor">Open site console <span aria-hidden="true">↗</span></Link>
+        <SessionBadge />
+        <Link className="header-cta" href="/supervisor">
+          Open site console <span aria-hidden="true">↗</span>
+        </Link>
       </header>
       <main className="site-main">{children}</main>
+      <nav className="site-bottom-nav" aria-label="Role entry navigation">
+        {BOTTOM_NAV.map((item) => (
+          <Link
+            key={item.href}
+            href={item.href}
+            className={activeLink(item.href) ? "site-bottom-link site-bottom-link-active" : "site-bottom-link"}
+          >
+            {item.label}
+          </Link>
+        ))}
+      </nav>
     </div>
   );
 }

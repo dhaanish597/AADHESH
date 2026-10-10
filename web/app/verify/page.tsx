@@ -1,13 +1,13 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Button, ErrorNote, IconTerminal, Loading, Panel, Pill } from "@/components/ui";
-import { getJson } from "@/lib/api";
+import { ApiErrorNote, Button, IconTerminal, Loading, Panel, Pill } from "@/components/ui";
+import { getJson, failureOf, type ApiFailure } from "@/lib/api";
 import type { VerifyPayload } from "@/lib/types";
 
 export default function VerifyPage() {
   const [data, setData] = useState<VerifyPayload | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<ApiFailure | null>(null);
   const [busy, setBusy] = useState(false);
 
   const run = useCallback(async () => {
@@ -16,7 +16,7 @@ export default function VerifyPage() {
     try {
       setData(await getJson<VerifyPayload>("/api/verify"));
     } catch (err) {
-      setError((err as Error).message);
+      setError(failureOf(err));
     } finally {
       setBusy(false);
     }
@@ -48,12 +48,7 @@ export default function VerifyPage() {
 
       {error && (
         <div className="mt-5">
-          <ErrorNote>
-            {error}
-            <span className="block text-xs text-danger/80">
-              Start the API with <code className="data">make api</code>.
-            </span>
-          </ErrorNote>
+          <ApiErrorNote error={error} />
         </div>
       )}
       {!data && !error && <Loading label="Re-proving the corpus" />}

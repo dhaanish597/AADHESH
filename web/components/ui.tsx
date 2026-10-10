@@ -1,5 +1,6 @@
 "use client";
 
+import type { ApiFailure } from "@/lib/api";
 import type { ObligationStatus } from "@/lib/types";
 
 /* ------------------------------------------------------------------ icons */
@@ -235,5 +236,26 @@ export function ErrorNote({ children }: { children: React.ReactNode }) {
     >
       {children}
     </div>
+  );
+}
+
+/**
+ * The error a screen shows when a call failed.
+ *
+ * The "is the API running" hint is withheld unless the API genuinely never answered, because a
+ * request the API refused came FROM a running API. Both facts can be true of the same screen, and
+ * showing them together told a signed-out visitor that the backend was down while the header
+ * beside it offered a sign-in that was all they needed.
+ */
+export function ApiErrorNote({ error }: { error: ApiFailure }) {
+  return (
+    <ErrorNote>
+      {error.message}
+      {error.unreachable && (
+        <span className="block text-xs text-danger/80">
+          Is the API running? Start it with <code className="data">make api</code>.
+        </span>
+      )}
+    </ErrorNote>
   );
 }

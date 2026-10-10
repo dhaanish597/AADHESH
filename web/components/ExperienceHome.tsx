@@ -245,18 +245,20 @@ export function ExperienceHome() {
         <div className="evidence-trail" role="group" aria-label="Evidence provenance chain">{PROVENANCE.map((step, index) => <span className="provenance-step" key={step.label}><button type="button" aria-pressed={provenanceIndex === index} onClick={() => setProvenanceIndex(index)}>{step.label}</button>{index < PROVENANCE.length - 1 && <i aria-hidden="true">→</i>}</span>)}</div>
         <div className="provenance-inspector" aria-live="polite"><div><span className="section-index">{PROVENANCE[provenanceIndex].label} / EVIDENCE LINK</span><p>{PROVENANCE[provenanceIndex].detail}</p></div><Link href={PROVENANCE[provenanceIndex].link}>Inspect source record <span aria-hidden="true">↗</span></Link></div>
         <div className="evidence-console"><div className="evidence-verdict"><span className={verify?.verify.passed ? "verdict-mark is-good" : verify ? "verdict-mark is-bad" : "verdict-mark"}>{verify ? (verify.verify.passed ? "✓" : "!") : "···"}</span><div><span className="section-index">LIVE LOCAL VERIFIER</span><strong>{verify ? (verify.verify.passed ? "Source integrity verified" : "Verification failed") : "Waiting for verifier"}</strong><span className="verdict-sub">{verify?.verify.command ?? "make verify"}</span></div></div><div className="evidence-counts"><div><strong>{proofSummary.sources ?? "—"}</strong><span>SOURCE FILES</span></div><div><strong>{proofSummary.citations ?? "—"}</strong><span>CITATIONS CHECKED</span></div></div><button type="button" className="evidence-expand" aria-expanded={sourceOpen} onClick={() => setSourceOpen((open) => !open)}>{sourceOpen ? "Hide verification output" : "Inspect verification output"}<span aria-hidden="true">{sourceOpen ? "−" : "+"}</span></button></div>
-        {sourceOpen && <pre className="verification-output">{verify?.verify.output ?? "The verifier output is not available. Start the API with make api."}</pre>}
+        {/* The verifier route needs a session, so a signed-out visitor gets no output from a
+            perfectly healthy API. Blame the backend only when health actually failed. */}
+        {sourceOpen && <pre className="verification-output">{verify?.verify.output ?? (apiOnline === false ? "The verifier output is not available. Start the API with make api." : "Sign in to run the verifier against the deployed corpus.")}</pre>}
         {verify?.tamper && <p className="tamper-note">Tamper check: <strong>{verify.tamper.caught ? "the isolated tamper was detected" : "not detected"}</strong>. This is the recorded output of the real scratch-copy check.</p>}
-      </section>
-
-      <section className="experience-section journeys-section" id="journeys">
+      </section>        <section className="experience-section journeys-section" id="journeys">
         <div className="section-heading-row"><div className="section-intro"><span className="section-index">05 — PEOPLE & OPERATIONS</span><h2>Two experiences.<br/><em>One accountable record.</em></h2><p>The site supervisor and the worker need different tools and different language.</p></div></div>
         <div className="journey-lines">
-          <Link href="/supervisor" className="journey-link supervisor-journey"><span className="section-index">SITE OPERATIONS / SUPERVISOR</span><strong>Understand the restriction.<br/>Commit to the action.</strong><span className="journey-foot">Obligations · cited clauses · Standing Order preview <b aria-hidden="true">↗</b></span></Link>
+          <Link href="/site" className="journey-link supervisor-journey"><span className="section-index">SITE OPERATIONS / SUPERVISOR</span><strong>Understand the restriction.<br/>Commit to the action.</strong><span className="journey-foot">Obligations · cited clauses · Standing Order preview <b aria-hidden="true">↗</b></span></Link>
           <Link href="/worker" className="journey-link worker-journey"><span className="section-index">PERSONAL RECORD / WORKER</span><strong>Know why work stopped.<br/>Confirm for yourself.</strong><span className="journey-foot">Mobile Parchi · Hindi & English · own acknowledgement <b aria-hidden="true">↗</b></span></Link>
+          <Link href="/facilitator" className="journey-link facilitator-journey"><span className="section-index">ASSISTANCE / FACILITATOR</span><strong>Help with a claim.<br/>Without the full record.</strong><span className="journey-foot">Consent-limited, redacted assistance <b aria-hidden="true">↗</b></span></Link>
         </div>
-        <div className="boundaries-row"><Link href="/cedar">Authorization lab <span>Real Cedar decisions ↗</span></Link><Link href="/facilitator">Consent & privacy <span>Redacted assistance ↗</span></Link><Link href="/impact">Documented impact <span>Public, aggregate data ↗</span></Link></div>
+        <div className="boundaries-row"><Link href="/cedar">Authorization lab <span>Real Cedar decisions ↗</span></Link><Link href="/verify">Verification lab <span>Source integrity ↗</span></Link><Link href="/impact">Public impact <span>Aggregate data ↗</span></Link></div>
       </section>
+
 
       <footer className="experience-footer"><span>AADHESH <i className="footer-mark"/></span><p>Environmental operations, grounded in verifiable evidence.</p><span>LOCAL DEMONSTRATION · NOT LEGAL ADVICE</span></footer>
     </div>

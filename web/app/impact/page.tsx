@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { getJson } from "@/lib/api";
+import { getJson, failureOf, type ApiFailure } from "@/lib/api";
 import { formatInstant, formatDate, stageName } from "@/lib/format";
 import type { PublicImpactPayload } from "@/lib/types";
 import {
@@ -12,7 +12,7 @@ import {
   IconCheck,
   IconArrow,
   Loading,
-  ErrorNote,
+  ApiErrorNote,
 } from "@/components/ui";
 
 type MetricStatus = PublicImpactPayload["metrics"]["sites_with_active_standing_orders"]["status"];
@@ -124,7 +124,7 @@ function DataStatusBanner({
 
 export default function ImpactPage() {
   const [data, setData] = useState<PublicImpactPayload | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<ApiFailure | null>(null);
   const [busy, setBusy] = useState(false);
 
   const load = useCallback(async () => {
@@ -133,7 +133,7 @@ export default function ImpactPage() {
     try {
       setData(await getJson<PublicImpactPayload>("/api/impact"));
     } catch (err) {
-      setError((err as Error).message);
+      setError(failureOf(err));
     } finally {
       setBusy(false);
     }
@@ -165,12 +165,7 @@ export default function ImpactPage() {
 
       {error && (
         <div className="mt-5">
-          <ErrorNote>
-            {error}
-            <span className="block text-xs text-danger/80">
-              Is the API running? Start it with <code className="data">make api</code>.
-            </span>
-          </ErrorNote>
+          <ApiErrorNote error={error} />
         </div>
       )}
 

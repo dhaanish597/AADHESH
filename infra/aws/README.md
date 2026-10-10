@@ -153,6 +153,83 @@ sam deploy \
 sam deploy
 ```
 
+The stack this repo actually runs is deployed without any of those flags on the command line:
+`infra/aws/samconfig.toml` records its stack name, region and the twelve parameter values it
+carries. That file is **gitignored** (`.gitignore:29`), so a fresh clone has to recreate it from
+the stack's own parameters (`describe-stacks`) rather than from memory. Several of them (`Environment=prod`, `ExplainBackend=bedrock`, the Bedrock model, the site
+label) differ from the template defaults, so a bare `sam deploy` that fell back to those defaults
+would change the system while appearing to change nothing. `sam build` first: it is what packages
+the rebuilt layer (`../build/lambda-layer`, assembled by `build-lambda.sh` because `cedarpy` is a
+native wheel that must be resolved for Linux).
+
+### 3.1 Check the two CORS facts a browser enforces, which curl cannot
+
+An API Gateway deployment is what makes a CORS change real, and API Gateway answers some requests
+— no token, an expired one, a malformed one, a throttled one — **before any Lambda runs**. Those
+refusals therefore never pass through the handler, so they carry none of the headers the handler
+sets, and a browser hides them from the console: every screen reports `Failed to fetch` and the
+console concludes the API is down. The console's origin is declared for exactly those responses in
+`infra/aws/template.yaml` (see the `GatewayResponses` block there, and §9.3 of
+`docs/superpowers/specs/2026-10-09-aadesh-aws-deployment-design.md`).
+
+Both facts are asserted against the deployed stage by flow 1 of `infra/aws/verify_deployment.py`:
+`OPTIONS` must answer with the console's origin *and nothing else*, and a tokenless `GET` must be a
+`401` that still carries it. Run it after any change to the API:
+
+```bash
+uv run --with boto3 python infra/aws/verify_deployment.py \
+  --api-url <ApiUrl output> \
+  --user-pool-id <UserPoolId output> \
+  --client-id <UserPoolClientId output>
+```
+
+The last word is the browser's, not the script's: sign in on the deployed console and load
+`/supervisor`. `Failed to fetch` there is the same bug, however clean the script looks.
+
+Then sign out and load `/site`. It must read "This screen needs a signed-in session. Use Sign in in
+the header." and **not** "Is the API running? Start it with `make api`" — that 401 came from a
+running API, and answering a readable refusal with a local-server hint tells a visitor to fix the
+wrong thing. The console draws that distinction at the point the error is caught (`isUnreachable`
+in `web/lib/api.ts`), so the hint survives only for the case it was written for: `make web` with no
+`make api` behind it.
+
+### 3.2 The account's concurrency ceiling, and the 500 it hides
+
+This account allows **10 concurrent Lambda executions**, and its unreserved floor is also 10 — so
+**no function can reserve concurrency at all**. Reserving three for the console was rejected
+outright:
+
+```
+Specified ReservedConcurrentExecutions for function decreases account's
+UnreservedConcurrentExecution below its minimum value of [10].
+```
+
+The standing-order machine fans out to one branch per worker, so it used to be able to occupy all
+ten slots. When the console's function lost that race, its invocation was throttled, and API
+Gateway answered with a 500 carrying **no CORS header** — `Failed to fetch` on screen, against an
+API that was up the whole time. That is the same symptom as an undeclared CORS header, produced
+from the shape of the account rather than from the API definition.
+
+The stack therefore does two things instead: `PendingAck` fans out to **5**, and every Lambda task
+retries **`Lambda.TooManyRequestsException`** (which Step Functions reports separately from the
+service exceptions — without it, a throttled branch was caught and recorded as a worker who *did
+not answer*). `API_CONFIGURATION_ERROR`, `INTEGRATION_FAILURE` and `INTEGRATION_TIMEOUT` are also
+declared in `GatewayResponses` with the console's origin, because those types pre-empt
+`DEFAULT_5XX` — and the 500 above is `API_CONFIGURATION_ERROR`'s default response, body and all.
+
+**Checking it** needs the acknowledgement burst, not a single request:
+
+```bash
+# CloudWatch: both must stay flat while a standing order runs
+aws cloudwatch get-metric-statistics --namespace AWS/Lambda --metric-name Throttles \
+  --dimensions Name=FunctionName,Value=aadesh-prod-api --start-time <ISO> --end-time <ISO> \
+  --period 60 --statistics Sum --region ap-south-1
+```
+
+`verify_deployment.py` flow 8 acknowledges all 34 Parchis and fails on any reply that is not a 200
+or a designed 400, so it is the check that catches this; a burst that produces 34/34 declarations of
+acknowledgement with zero throttles is the pass condition.
+
 ### 4. Deploy Frontend to Amplify
 
 ```bash

@@ -46,8 +46,10 @@ aadesh-web = "aadesh_web.server:main"
 packages = [
     "services/aadesh_core",
     "services/aadesh_adapters",
+    "services/aadesh_app",
     "services/aadesh_cli",
     "services/aadesh_web",
+    "services/aadesh_aws",
 ]
 
 [tool.pytest.ini_options]

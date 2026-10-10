@@ -1,71 +1,144 @@
 AWSTemplateFormatVersion: "2010-09-09"
 Transform: AWS::Serverless-2016-10-31
 Description: >
-  Aadesh — Environmental compliance execution system for Delhi-NCR construction sites.
-  Every service has a real responsibility; no service is added merely to increase count.
+  Aadesh -- environmental compliance execution system for Delhi-NCR construction sites.
+  Every service here has one responsibility nothing else performs: Amplify serves the console,
+  Cognito holds the identity Cedar reasons about, API Gateway is the authenticated entry point,
+  Lambda runs the core per request and per workflow step, DynamoDB holds Parchis/tokens/
+  orders/sites/readings, S3 holds the authoritative CAQM bytes, Step Functions holds
+  PENDING_ACK across hours, EventBridge schedules the reading fetch and routes the stage
+  trigger, CloudWatch holds the logs, the denial metric and the alarms, and Bedrock is
+  optional and outside the enforcement path. See the README for what was considered and left
+  out, and why.
 
 Globals:
   Function:
-    Timeout: 30
     Runtime: python3.13
-    Architectures: [arm64]
-    MemorySize: 256
+    Architectures: [x86_64]
+    Timeout: 30
+    MemorySize: 512
+    Tracing: Active
+    Layers:
+      - !Ref AadeshCodeLayer
     Environment:
       Variables:
-        PYTHONPATH: "/var/task/services"
+        # AWS_REGION is reserved by the runtime and is set by Lambda itself; naming it here
+        # is rejected by cfn-lint and unnecessary.
+        PYTHONPATH: "/opt/python:/var/task"
         AADESH_ENV: !Ref Environment
-        AADESH_CORPUS_BACKEND: !Ref CorpusBackend
-        AADESH_STORE_BACKEND: dynamodb
-        AADESH_AUTHZ_BACKEND: cedar
-        AADESH_EXPLAIN_BACKEND: !Ref ExplainBackend
+        AADESH_SITE_ID: !Ref SiteId
+        AADESH_SITE_LABEL: !Ref SiteLabel
+        AADESH_SUPERVISOR_ID: !Ref SupervisorId
+        AADESH_FACILITATOR_ID: !Ref FacilitatorId
+        AADESH_WORKER_COUNT: !Ref WorkerCount
+        AADESH_REGISTERED_WORKERS: !Ref RegisteredWorkers
+        AADESH_SOURCE_BUCKET: !Ref CorpusBucket
+        AADESH_CORPUS_PREFIX: corpus
+        AADESH_CORPUS_CACHE: /tmp/aadesh-corpus
+        # The physical table names are stack-wide, so they live in Globals. Setting them only
+        # on the API function was a real defect: every workflow step fell back to the adapter's
+        # unprefixed defaults (`aadesh-sites`, `aadesh-parchis`, ...), which this stack does not
+        # create and its IAM does not grant -- so StageTrip was denied a GetItem on a table that
+        # does not exist, and the failure surfaced three steps later at Audit.
+        AADESH_TABLE_PARCHIS: !Ref ParchisTable
+        AADESH_TABLE_OPERATIONAL: !Ref OperationalTable
+        AADESH_TABLE_STANDING_ORDERS: !Ref StandingOrdersTable
+        AADESH_TABLE_TRIGGER_RUNS: !Ref TriggerRunsTable
+        AADESH_TABLE_READINGS: !Ref ReadingsTable
+        AADESH_TABLE_SITES: !Ref SitesTable
     Tags:
       Application: aadesh
-      ManagedBy: sam
 
 Parameters:
   Environment:
     Type: String
-    Default: dev
+    Default: prod
     AllowedValues: [dev, staging, prod]
-    Description: Deployment environment
 
-  CorpusBackend:
+  SiteId:
     Type: String
-    Default: s3
-    AllowedValues: [local, s3]
-    Description: Where corpus documents are stored
+    Default: example-piling-site
+
+  SiteLabel:
+    Type: String
+    Default: "Construction Site — Delhi-NCR"
+
+  SupervisorId:
+    Type: String
+    Default: supervisor-001
+    Description: >
+      The demonstration supervisor reference used by the seeded Parchis and the local CLI. An
+      authenticated supervisor is identified by their Cognito `sub`, not by this value.
+
+  FacilitatorId:
+    Type: String
+    Default: facilitator-001
+
+  WorkerCount:
+    Type: String
+    Default: "34"
+
+  RegisteredWorkers:
+    Type: String
+    Default: "27"
+
+  StationId:
+    Type: String
+    Default: DL-NCR-ROHINI-01
+    Description: The nearest CPCB station whose readings this site is compared against.
 
   ExplainBackend:
     Type: String
     Default: deterministic
-    AllowedValues: [deterministic, strands_bedrock]
-    Description: Explanation provider — deterministic is always correct
+    AllowedValues: [deterministic, bedrock, strands_bedrock]
+    Description: >
+      deterministic is the correct default: the deterministic sentences are already the answer.
+      bedrock and strands_bedrock let a model rephrase an already-computed result, never change
+      one, and are the ONLY reason this stack asks for a Bedrock grant.
 
-  OpenSearchDomainEndpoint:
+  BedrockModelId:
     Type: String
     Default: ""
-    Description: OpenSearch domain endpoint (optional, for corpus indexing)
+    Description: e.g. amazon.nova-lite-v1:0. Required when ExplainBackend is not deterministic.
 
-  CognitoUserPoolId:
+  BedrockRegion:
     Type: String
-    Default: ""
-    Description: Cognito User Pool ID (created if empty in dev)
+    Default: us-east-1
+    Description: >
+      Bedrock is pinned per-region and a model enabled in one region is not callable in
+      another, so the call region is a parameter rather than an assumption. Default matches the
+      project's documented pin.
 
-  CognitoDomainPrefix:
-    Type: String
-    Default: ""
-    Description: Cognito hosted UI domain prefix
+  LogRetentionDays:
+    Type: Number
+    Default: 90
 
 Conditions:
-  CreateCognito: !Equals [!Ref CognitoUserPoolId, ""]
-  UseBedrock: !Equals [!Ref ExplainBackend, strands_bedrock]
-  UseOpenSearch: !Not [!Equals [!Ref OpenSearchDomainEndpoint, ""]]
-  IsProd: !Equals [!Ref Environment, prod]
+  UseModel: !Not [!Equals [!Ref ExplainBackend, deterministic]]
+  UseModelAndModelId: !And
+    - !Condition UseModel
+    - !Not [!Equals [!Ref BedrockModelId, ""]]
 
 Resources:
-  # ============================================================================
-  # DynamoDB Tables — Parchi persistence, readings cache, standing orders
-  # ============================================================================
+  # ==========================================================================
+  # The code artefact. One layer, so the deterministic core the tests prove is
+  # the exact same bytes the deployed functions import.
+  # ==========================================================================
+
+  AadeshCodeLayer:
+    Type: AWS::Serverless::LayerVersion
+    Metadata:
+      SkipBuild: true
+    Properties:
+      LayerName: !Sub "${AWS::StackName}-code"
+      Description: aadesh_core + adapters + app + handlers, and the bundled Cedar policy set
+      ContentUri: ../../build/lambda-layer/
+      CompatibleRuntimes: [python3.13]
+      RetentionPolicy: Delete
+
+  # ==========================================================================
+  # DynamoDB -- six tables, each with a distinct access pattern and lifecycle
+  # ==========================================================================
 
   ParchisTable:
     Type: AWS::DynamoDB::Table
@@ -73,62 +146,44 @@ Resources:
       TableName: !Sub "${AWS::StackName}-parchis"
       BillingMode: PAY_PER_REQUEST
       PointInTimeRecoverySpecification:
-        PointInTimeRecoveryEnabled: !If IsProd, true, false
+        PointInTimeRecoveryEnabled: true
+      SSESpecification:
+        SSEEnabled: true
       AttributeDefinitions:
-        - AttributeName: parchi_id
-          AttributeType: S
-        - AttributeName: site_id
-          AttributeType: S
-        - AttributeName: worker_id
-          AttributeType: S
-        - AttributeName: state
-          AttributeType: S
+        - { AttributeName: parchi_id, AttributeType: S }
+        - { AttributeName: site_id, AttributeType: S }
+        - { AttributeName: worker_id, AttributeType: S }
       KeySchema:
-        - AttributeName: parchi_id
-          KeyType: HASH
+        - { AttributeName: parchi_id, KeyType: HASH }
       GlobalSecondaryIndexes:
         - IndexName: site_id-index
-          KeySchema:
-            - AttributeName: site_id
-              KeyType: HASH
-          Projection:
-            ProjectionType: ALL
+          KeySchema: [{ AttributeName: site_id, KeyType: HASH }]
+          Projection: { ProjectionType: ALL }
         - IndexName: worker_id-index
-          KeySchema:
-            - AttributeName: worker_id
-              KeyType: HASH
-          Projection:
-            ProjectionType: ALL
-        - IndexName: state-index
-          KeySchema:
-            - AttributeName: state
-              KeyType: HASH
-          Projection:
-            ProjectionType: ALL
-      StreamSpecification:
-        StreamViewType: NEW_AND_OLD_IMAGES
+          KeySchema: [{ AttributeName: worker_id, KeyType: HASH }]
+          Projection: { ProjectionType: ALL }
       Tags:
-        - Key: Purpose
-          Value: Parchi persistence — the authoritative worker record
+        # AWS tag values are limited to letters, numbers, spaces and + - = . _ : / @ . Commas
+        # and apostrophes are rejected at create time, so the tag text is deliberately plain.
+        - { Key: Purpose, Value: "The worker Parchi - evidence and append-only once sealed" }
 
-  ReadingsTable:
+  OperationalTable:
     Type: AWS::DynamoDB::Table
     Properties:
-      TableName: !Sub "${AWS::StackName}-readings"
+      TableName: !Sub "${AWS::StackName}-operational"
       BillingMode: PAY_PER_REQUEST
+      SSESpecification:
+        SSEEnabled: true
       AttributeDefinitions:
-        - AttributeName: station_id
-          AttributeType: S
-        - AttributeName: observed_at
-          AttributeType: S
+        - { AttributeName: pk, AttributeType: S }
       KeySchema:
-        - AttributeName: station_id
-          KeyType: HASH
-        - AttributeName: observed_at
-          KeyType: RANGE
+        - { AttributeName: pk, KeyType: HASH }
+      TimeToLiveSpecification:
+        AttributeName: ttl
+        Enabled: true
       Tags:
         - Key: Purpose
-          Value: Cached AQI readings with provenance — evidence, not decision input
+          Value: "Acknowledgement tokens and the idempotency ledger and task tokens and QR link cache"
 
   StandingOrdersTable:
     Type: AWS::DynamoDB::Table
@@ -136,52 +191,69 @@ Resources:
       TableName: !Sub "${AWS::StackName}-standing-orders"
       BillingMode: PAY_PER_REQUEST
       PointInTimeRecoverySpecification:
-        PointInTimeRecoveryEnabled: !If IsProd, true, false
+        PointInTimeRecoveryEnabled: true
+      SSESpecification:
+        SSEEnabled: true
       AttributeDefinitions:
-        - AttributeName: standing_order_id
-          AttributeType: S
-        - AttributeName: site_id
-          AttributeType: S
-        - AttributeName: supervisor_id
-          AttributeType: S
+        - { AttributeName: standing_order_id, AttributeType: S }
+        - { AttributeName: site_id, AttributeType: S }
       KeySchema:
-        - AttributeName: standing_order_id
-          KeyType: HASH
+        - { AttributeName: standing_order_id, KeyType: HASH }
       GlobalSecondaryIndexes:
         - IndexName: site_id-index
-          KeySchema:
-            - AttributeName: site_id
-              KeyType: HASH
-          Projection:
-            ProjectionType: ALL
-        - IndexName: supervisor_id-index
-          KeySchema:
-            - AttributeName: supervisor_id
-              KeyType: HASH
-          Projection:
-            ProjectionType: ALL
+          KeySchema: [{ AttributeName: site_id, KeyType: HASH }]
+          Projection: { ProjectionType: ALL }
+      Tags:
+        - { Key: Purpose, Value: "Signed and time-bounded supervisor pre-commitments" }
+
+  TriggerRunsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub "${AWS::StackName}-trigger-runs"
+      BillingMode: PAY_PER_REQUEST
+      SSESpecification:
+        SSEEnabled: true
+      AttributeDefinitions:
+        - { AttributeName: fingerprint, AttributeType: S }
+      KeySchema:
+        - { AttributeName: fingerprint, KeyType: HASH }
       Tags:
         - Key: Purpose
-          Value: Standing Order pre-commitments — time-bounded supervisor commitments
+          Value: "Create-if-absent claim that makes duplicate Parchis unrepresentable"
+
+  ReadingsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub "${AWS::StackName}-readings"
+      BillingMode: PAY_PER_REQUEST
+      SSESpecification:
+        SSEEnabled: true
+      AttributeDefinitions:
+        - { AttributeName: station_id, AttributeType: S }
+        - { AttributeName: observed_at, AttributeType: S }
+      KeySchema:
+        - { AttributeName: station_id, KeyType: HASH }
+        - { AttributeName: observed_at, KeyType: RANGE }
+      Tags:
+        - { Key: Purpose, Value: "Provenance-stamped station readings - evidence and never a stage input" }
 
   SitesTable:
     Type: AWS::DynamoDB::Table
     Properties:
       TableName: !Sub "${AWS::StackName}-sites"
       BillingMode: PAY_PER_REQUEST
+      SSESpecification:
+        SSEEnabled: true
       AttributeDefinitions:
-        - AttributeName: site_id
-          AttributeType: S
+        - { AttributeName: site_id, AttributeType: S }
       KeySchema:
-        - AttributeName: site_id
-          KeyType: HASH
+        - { AttributeName: site_id, KeyType: HASH }
       Tags:
-        - Key: Purpose
-          Value: Construction site profiles — the facts obligations are resolved against
+        - { Key: Purpose, Value: "The facts obligations are resolved against - data and not code" }
 
-  # ============================================================================
-  # S3 — Corpus document storage (hashed CAQM order bytes)
-  # ============================================================================
+  # ==========================================================================
+  # S3 -- the authoritative CAQM bytes
+  # ==========================================================================
 
   CorpusBucket:
     Type: AWS::S3::Bucket
@@ -199,8 +271,7 @@ Resources:
         IgnorePublicAcls: true
         RestrictPublicBuckets: true
       Tags:
-        - Key: Purpose
-          Value: Hashed CAQM order bytes — source of truth for citations
+        - { Key: Purpose, Value: "Hashed CAQM order bytes - the source of truth for every citation" }
 
   CorpusBucketPolicy:
     Type: AWS::S3::BucketPolicy
@@ -218,62 +289,34 @@ Resources:
               - !Sub "${CorpusBucket.Arn}/*"
             Condition:
               Bool:
-                aws:SecureTransport: false
+                aws:SecureTransport: "false"
 
-  # ============================================================================
-  # OpenSearch — Corpus page indexing for verification search (opt-in)
-  # ============================================================================
-
-  OpenSearchDomain:
-    Type: AWS::OpenSearchService::Domain
-    Condition: UseOpenSearch
-    Properties:
-      DomainName: !Sub "${AWS::StackName}-corpus"
-      EngineVersion: OpenSearch_2.11
-      ClusterConfig:
-        InstanceType: t3.small.search
-        InstanceCount: 1
-        DedicatedMasterEnabled: false
-        ZoneAwarenessEnabled: false
-      EncryptionAtRestOptions:
-        Enabled: true
-      NodeToNodeEncryptionOptions:
-        Enabled: true
-      DomainEndpointOptions:
-        EnforceHTTPS: true
-        TLSSecurityPolicy: Policy-Min-TLS-1-2-2017-10
-      AccessPolicies:
-        Version: "2012-10-17"
-        Statement:
-          - Effect: Allow
-            Principal:
-              AWS: !GetAtt LambdaExecutionRole.Arn
-            Action: es:ESHttp*
-            Resource: !Sub "arn:aws:es:${AWS::Region}:${AWS::AccountId}:domain/${AWS::StackName}-corpus/*"
-      Tags:
-        - Key: Purpose
-          Value: Indexed corpus pages — search-backed citation verification
-
-  # ============================================================================
-  # Cognito — User authentication for frontend
-  # ============================================================================
+  # ==========================================================================
+  # Cognito -- identity, and the two attributes Cedar reasons about
+  # ==========================================================================
 
   UserPool:
     Type: AWS::Cognito::UserPool
-    Condition: CreateCognito
     Properties:
       UserPoolName: !Sub "${AWS::StackName}-users"
-      UsernameAttributes:
-        - email
-      AutoVerifiedAttributes:
-        - email
-      MfaConfiguration: OFF
+      UsernameAttributes: [email]
+      AutoVerifiedAttributes: [email]
+      MfaConfiguration: "OFF"
       Schema:
+        # The three attributes the authorization boundary reads. `role` and `assigned_site`
+        # are what the Cedar policy compares (`principal.role == "supervisor"`,
+        # `resource.siteId == principal.assignedSite`); `principal_id` is the stable identity
+        # a parchi names, so `resource.worker == principal` (ENTITY equality) can be satisfied
+        # by a `worker-001` and never by a Cognito `sub` UUID.
         - Name: role
           AttributeDataType: String
           Mutable: true
           Required: false
         - Name: assigned_site
+          AttributeDataType: String
+          Mutable: true
+          Required: false
+        - Name: principal_id
           AttributeDataType: String
           Mutable: true
           Required: false
@@ -285,11 +328,18 @@ Resources:
           RequireNumbers: true
           RequireSymbols: true
       UserPoolTags:
-        Application: aadesh
+        # Cognito restricts tag values to letters, numbers, spaces and _.:/=+-@ . A comma is
+        # rejected at create time, which is how this line earned its comment.
+        Purpose: "Identity and the role/assigned_site the authorization boundary reads"
+
+  UserPoolDomain:
+    Type: AWS::Cognito::UserPoolDomain
+    Properties:
+      Domain: !Sub "aadesh-${AWS::AccountId}"
+      UserPoolId: !Ref UserPool
 
   UserPoolClient:
     Type: AWS::Cognito::UserPoolClient
-    Condition: CreateCognito
     Properties:
       UserPoolId: !Ref UserPool
       ClientName: aadesh-web
@@ -297,325 +347,72 @@ Resources:
       ExplicitAuthFlows:
         - ALLOW_USER_SRP_AUTH
         - ALLOW_REFRESH_TOKEN_AUTH
+        # ADMIN_USER_PASSWORD_AUTH is reachable ONLY through `AdminInitiateAuth`, which is
+        # signed with IAM credentials. It is not a public sign-in path: it exists so an
+        # operator (or the verification script) can mint a token for an already-created user
+        # without driving the hosted UI by hand. The browser flow stays SRP via the hosted UI.
+        - ALLOW_ADMIN_USER_PASSWORD_AUTH
       AllowedOAuthFlowsUserPoolClient: true
-      AllowedOAuthFlows:
-        - code
-      AllowedOAuthScopes:
-        - openid
+      # `implicit` is deliberate: the console is a STATIC export on Amplify Hosting, so there is
+      # no server-side component that could hold a client secret or exchange a code. The
+      # ID token returned this way is the same ID token the API authorizer validates.
+      AllowedOAuthFlows: [implicit]
+      AllowedOAuthScopes: [openid, email, profile]
+      SupportedIdentityProviders: [COGNITO]
+      # Read: the ID token has to carry the three attributes Cedar reasons about, and a
+      # custom attribute is only included in the ID token when the client may read it. Relying
+      # on the default ("all standard attributes") would drop every `custom:` claim and every
+      # supervisor would match NO Cedar rule at all -- a silent, total authorization failure.
+      ReadAttributes:
         - email
-      SupportedIdentityProviders:
-        - COGNITO
+        - email_verified
+        - custom:role
+        - custom:assigned_site
+        - custom:principal_id
+      # Write: the client may not write any of the three. Group membership and these
+      # attributes are set through the admin API only. Without this, a signed-in worker could
+      # rewrite `custom:principal_id` to another worker's id and acknowledge that worker's
+      # parchi -- the exact invariant the `no-proxy-acknowledgement` forbid rule enforces.
+      WriteAttributes:
+        - email
       CallbackURLs:
-        - !Sub "https://${FrontendDomain}.amplifyapp.com/signin-callback"
-        - !Sub "https://${AWS::StackName}.amplifyapp.com/signin-callback"
+        - !Sub "https://main.${AmplifyApp.AppId}.amplifyapp.com/auth/callback"
+        - "http://localhost:3000/auth/callback"
       LogoutURLs:
-        - !Sub "https://${FrontendDomain}.amplifyapp.com/signout-callback"
-      PreventUserExistenceErrors: true
+        - !Sub "https://main.${AmplifyApp.AppId}.amplifyapp.com/"
+        - "http://localhost:3000/"
+      # Cognito's enum here is ENABLED/LEGACY, not a boolean. `true` is rejected at create time.
+      PreventUserExistenceErrors: ENABLED
 
-  UserPoolDomain:
-    Type: AWS::Cognito::UserPoolDomain
-    Condition: CreateCognito
+  # ==========================================================================
+  # Amplify Hosting -- the Next.js console
+  # ==========================================================================
+
+  AmplifyApp:
+    Type: AWS::Amplify::App
     Properties:
-      Domain: !If [IsProd, !Ref CognitoDomainPrefix, !Sub "${AWS::StackName}-auth"]
-      UserPoolId: !Ref UserPool
+      Name: !Sub "${AWS::StackName}-web"
+      Description: Aadesh supervisor, worker, facilitator, verification and impact console
+      Tags:
+        - { Key: Purpose, Value: "Serves the static Next.js export with a URL and TLS" }
+      CustomRules:
+        # A static export writes /supervisor/index.html and friends; anything the export does
+        # not produce is a genuine 404 and must stay one.
+        - Source: "</^[^.]+$|\\.(?!(css|gif|ico|jpg|js|png|txt|svg|woff|woff2|ttf|map|json|webp)$)([^.]+$)/>"
+          Target: "/index.html"
+          Status: "404-200"
 
-  # ============================================================================
-  # Lambda Functions — Thin adapters over aadesh_core
-  # ============================================================================
-
-  ApiHandler:
-    Type: AWS::Serverless::Function
+  AmplifyBranch:
+    Type: AWS::Amplify::Branch
     Properties:
-      FunctionName: !Sub "${AWS::StackName}-api"
-      Handler: aadesh_aws.api_handler.handle
-      CodeUri: ../../services/
-      Description: >
-        Thin adapter: HTTP requests → aadesh_core domain operations.
-        No business logic of its own — same core the CLI and local API use.
-      Environment:
-        Variables:
-          AADESH_TABLE_PARCHIS: !Ref ParchisTable
-          AADESH_TABLE_READINGS: !Ref ReadingsTable
-          AADESH_TABLE_STANDING_ORDERS: !Ref StandingOrdersTable
-          AADESH_TABLE_SITES: !Ref SitesTable
-          AADESH_SOURCE_BUCKET: !Ref CorpusBucket
-          AADESH_CEDAR_POLICY_PATH: /var/task/infra/cedar/policies.cedar
-          AADESH_CEDAR_DENIALS_PATH: /var/task/infra/cedar/denials.json
-          AADESH_CEDAR_SCHEMA_PATH: /var/task/infra/cedar/schema.cedarschema.json
-          BEDROCK_REGION: !Ref AWS::Region
-          AWS_ENDPOINT_URL: ""
-      Policies:
-        - DynamoDBCrudPolicy:
-            TableName: !Ref ParchisTable
-        - DynamoDBReadPolicy:
-            TableName: !Ref ReadingsTable
-        - DynamoDBCrudPolicy:
-            TableName: !Ref StandingOrdersTable
-        - DynamoDBReadPolicy:
-            TableName: !Ref SitesTable
-        - S3ReadPolicy:
-            BucketName: !Ref CorpusBucket
-        - Statement:
-            - Effect: Allow
-              Action:
-                - logs:CreateLogGroup
-                - logs:CreateLogStream
-                - logs:PutLogEvents
-              Resource: !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/${AWS::StackName}-api:*"
-            - Effect: Allow
-              Action:
-                - es:ESHttpGet
-                - es:ESHttpPost
-              Resource: !If [UseOpenSearch, !Sub "arn:aws:es:${AWS::Region}:${AWS::AccountId}:domain/${AWS::StackName}-corpus/*", !Ref "AWS::NoValue"]
-            - !If
-              - UseBedrock
-              - Effect: Allow
-                Action:
-                  - bedrock:InvokeModel
-                Resource: !Join
-                  - ""
-                  - - "arn:aws:bedrock:"
-                    - !Ref "AWS::Region"
-                    - ":"
-                    - !Ref "AWS::AccountId"
-                    - ":foundation-model/amazon.nova-lite-v1:* "
-                    - "arn:aws:bedrock:"
-                    - !Ref "AWS::Region"
-                    - ":"
-                    - !Ref "AWS::AccountId"
-                    - ":foundation-model/amazon.nova-micro-v1:* "
-                    - "arn:aws:bedrock:"
-                    - !Ref "AWS::Region"
-                    - ":"
-                    - !Ref "AWS::AccountId"
-                    - ":foundation-model/anthropic.claude-haiku-4-5-20251101-v1:* "
-                    - "arn:aws:bedrock:"
-                    - !Ref "AWS::Region"
-                    - ":"
-                    - !Ref "AWS::AccountId"
-                    - ":foundation-model/anthropic.claude-sonnet-4-5-20250827-v1:*"
-              - !Ref "AWS::NoValue"
-      Events:
-        ApiEvent:
-          Type: Api
-          Properties:
-            Path: /{proxy+}
-            Method: ANY
-            RestApiId: !Ref AadeshApi
-            Auth:
-              Authorizer: CognitoAuthorizer
-              AuthorizationType: COGNITO_USER_POOLS
+      AppId: !GetAtt AmplifyApp.AppId
+      BranchName: main
+      Stage: PRODUCTION
+      EnableAutoBuild: false
 
-  IngestHandler:
-    Type: AWS::Serverless::Function
-    Properties:
-      FunctionName: !Sub "${AWS::StackName}-ingest"
-      Handler: aadesh_aws.ingest_handler.handle
-      CodeUri: ../../services/
-      Description: >
-        EventBridge-triggered AQI ingestion. Reads OpenAQ/CPCB, writes to DynamoDB
-        with provenance stamp. Does NOT decide any stage — that comes from an order.
-      Timeout: 60
-      Environment:
-        Variables:
-          AADESH_TABLE_READINGS: !Ref ReadingsTable
-          AADESH_STATION_ID: !Ref StationId
-          AADESH_READING_STALENESS_SECONDS: "5400"
-          OPENAQ_BASE_URL: "https://api.openaq.org/v3"
-          AWS_ENDPOINT_URL: ""
-      Policies:
-        - DynamoDBWritePolicy:
-            TableName: !Ref ReadingsTable
-        - Statement:
-            - Effect: Allow
-              Action:
-                - logs:CreateLogGroup
-                - logs:CreateLogStream
-                - logs:PutLogEvents
-              Resource: !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/${AWS::StackName}-ingest:*"
-            - Effect: Allow
-              Action:
-                - ec2:CreateNetworkInterface
-                - ec2:DescribeNetworkInterfaces
-                - ec2:DeleteNetworkInterface
-              Resource: "*"
-      Events:
-        Every15Minutes:
-          Type: ScheduleV2
-          Properties:
-            Description: Ingest AQI readings every 15 minutes
-            ScheduleExpression: rate(15 minutes)
-
-  ResolveHandler:
-    Type: AWS::Serverless::Function
-    Properties:
-      FunctionName: !Sub "${AWS::StackName}-resolve"
-      Handler: aadesh_aws.resolve_handler.handle
-      CodeUri: ../../services/
-      Description: >
-        Resolve obligations for a site. Pure deterministic core — no model, no network
-        beyond AWS SDK for persistence. Returns obligation set with citations.
-      Timeout: 30
-      Environment:
-        Variables:
-          AADESH_TABLE_PARCHIS: !Ref ParchisTable
-          AADESH_TABLE_STANDING_ORDERS: !Ref StandingOrdersTable
-          AADESH_TABLE_SITES: !Ref SitesTable
-          AADESH_SOURCE_BUCKET: !Ref CorpusBucket
-          AADESH_CEDAR_POLICY_PATH: /var/task/infra/cedar/policies.cedar
-          AADESH_CEDAR_DENIALS_PATH: /var/task/infra/cedar/denials.json
-          AADESH_CEDAR_SCHEMA_PATH: /var/task/infra/cedar/schema.cedarschema.json
-          AWS_ENDPOINT_URL: ""
-      Policies:
-        - DynamoDBCrudPolicy:
-            TableName: !Ref ParchisTable
-        - DynamoDBReadPolicy:
-            TableName: !Ref StandingOrdersTable
-        - DynamoDBReadPolicy:
-            TableName: !Ref SitesTable
-        - S3ReadPolicy:
-            BucketName: !Ref CorpusBucket
-        - Statement:
-            - Effect: Allow
-              Action:
-                - logs:CreateLogGroup
-                - logs:CreateLogStream
-                - logs:PutLogEvents
-              Resource: !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/${AWS::StackName}-resolve:*"
-      Events:
-        ResolveApi:
-          Type: Api
-          Properties:
-            Path: /resolve
-            Method: POST
-            RestApiId: !Ref AadeshApi
-            Auth:
-              Authorizer: CognitoAuthorizer
-              AuthorizationType: COGNITO_USER_POOLS
-
-  StandingOrderHandler:
-    Type: AWS::Serverless::Function
-    Properties:
-      FunctionName: !Sub "${AWS::StackName}-standing-order"
-      Handler: aadesh_aws.standing_order_handler.handle
-      CodeUri: ../../services/
-      Description: >
-        Create and manage Standing Orders. Cedar authorizes the supervisor;
-        domain enforces the lifecycle.
-      Timeout: 30
-      Environment:
-        Variables:
-          AADESH_TABLE_PARCHIS: !Ref ParchisTable
-          AADESH_TABLE_STANDING_ORDERS: !Ref StandingOrdersTable
-          AADESH_TABLE_SITES: !Ref SitesTable
-          AADESH_SOURCE_BUCKET: !Ref CorpusBucket
-          AADESH_CEDAR_POLICY_PATH: /var/task/infra/cedar/policies.cedar
-          AADESH_CEDAR_DENIALS_PATH: /var/task/infra/cedar/denials.json
-          AADESH_CEDAR_SCHEMA_PATH: /var/task/infra/cedar/schema.cedarschema.json
-          STEP_FUNCTIONS_ARN: !Ref StandingOrderStateMachine
-          AWS_ENDPOINT_URL: ""
-      Policies:
-        - DynamoDBCrudPolicy:
-            TableName: !Ref ParchisTable
-        - DynamoDBCrudPolicy:
-            TableName: !Ref StandingOrdersTable
-        - DynamoDBReadPolicy:
-            TableName: !Ref SitesTable
-        - S3ReadPolicy:
-            BucketName: !Ref CorpusBucket
-        - Statement:
-            - Effect: Allow
-              Action:
-                - states:StartExecution
-                - states:DescribeExecution
-              Resource: !Ref StandingOrderStateMachine
-            - Effect: Allow
-              Action:
-                - logs:CreateLogGroup
-                - logs:CreateLogStream
-                - logs:PutLogEvents
-              Resource: !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/${AWS::StackName}-standing-order:*"
-      Events:
-        StandingOrderApi:
-          Type: Api
-          Properties:
-            Path: /standing-order
-            Method: POST
-            RestApiId: !Ref AadeshApi
-            Auth:
-              Authorizer: CognitoAuthorizer
-              AuthorizationType: COGNITO_USER_POOLS
-
-  ParchiAckHandler:
-    Type: AWS::Serverless::Function
-    Properties:
-      FunctionName: !Sub "${AWS::StackName}-parchi-ack"
-      Handler: aadesh_aws.parchi_ack_handler.handle
-      CodeUri: ../../services/
-      Description: >
-        Worker acknowledges their own Parchi. Cedar checks resource.worker == principal;
-        domain checks again. Idempotent by design.
-      Timeout: 30
-      Environment:
-        Variables:
-          AADESH_TABLE_PARCHIS: !Ref ParchisTable
-          AADESH_QR_SIGNING_SECRET: !Ref QrSigningSecret
-          AADESH_QR_TOKEN_TTL_SECONDS: "86400"
-          AADESH_CEDAR_POLICY_PATH: /var/task/infra/cedar/policies.cedar
-          AADESH_CEDAR_DENIALS_PATH: /var/task/infra/cedar/denials.json
-          AADESH_CEDAR_SCHEMA_PATH: /var/task/infra/cedar/schema.cedarschema.json
-          AWS_ENDPOINT_URL: ""
-      Policies:
-        - DynamoDBCrudPolicy:
-            TableName: !Ref ParchisTable
-        - Statement:
-            - Effect: Allow
-              Action:
-                - logs:CreateLogGroup
-                - logs:CreateLogStream
-                - logs:PutLogEvents
-              Resource: !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/${AWS::StackName}-parchi-ack:*"
-      Events:
-        ParchiAckApi:
-          Type: Api
-          Properties:
-            Path: /parchi/acknowledge
-            Method: POST
-            RestApiId: !Ref AadeshApi
-            Auth:
-              Authorizer: CognitoAuthorizer
-              AuthorizationType: COGNITO_USER_POOLS
-
-  StepFunctionsTaskWaiter:
-    Type: AWS::Serverless::Function
-    Properties:
-      FunctionName: !Sub "${AWS::StackName}-parchi-ack-waiter"
-      Handler: aadesh_aws.task_waiter.handle
-      CodeUri: ../../services/
-      Description: >
-        Called by Step Functions waitForTaskToken. Waits for worker acknowledgement
-        then signals the workflow to continue. Durably holds state across hours.
-      Timeout: 900
-      Environment:
-        Variables:
-          AADESH_TABLE_PARCHIS: !Ref ParchisTable
-          AADESH_CEDAR_POLICY_PATH: /var/task/infra/cedar/policies.cedar
-          AADESH_CEDAR_DENIALS_PATH: /var/task/infra/cedar/denials.json
-          AWS_ENDPOINT_URL: ""
-      Policies:
-        - DynamoDBCrudPolicy:
-            TableName: !Ref ParchisTable
-        - Statement:
-            - Effect: Allow
-              Action:
-                - logs:CreateLogGroup
-                - logs:CreateLogStream
-                - logs:PutLogEvents
-              Resource: !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/${AWS::StackName}-parchi-ack-waiter:*"
-
-  # ============================================================================
-  # API Gateway — Single entry point for frontend
-  # ============================================================================
+  # ==========================================================================
+  # API Gateway -- one authenticated entry point
+  # ==========================================================================
 
   AadeshApi:
     Type: AWS::Serverless::Api
@@ -623,291 +420,560 @@ Resources:
       Name: !Sub "${AWS::StackName}-api"
       StageName: !Ref Environment
       TracingEnabled: true
-      Cors:
-        AllowMethods: "'GET,POST,OPTIONS'"
-        AllowHeaders: "'Content-Type,Authorization,X-Amz-Cognito-Identity-Pool-Id'"
-        AllowOrigin: "'https://*.amplifyapp.com'"
       Auth:
         DefaultAuthorizer: CognitoAuthorizer
+        AddDefaultAuthorizerToCorsPreflight: false
         Authorizers:
           CognitoAuthorizer:
             UserPoolArn: !GetAtt UserPool.Arn
+            Identity:
+              Header: Authorization
+      # `AllowOrigin` is ONE origin, and it has to stay one origin. API Gateway writes this
+      # string verbatim into `Access-Control-Allow-Origin` on the preflight response, and a
+      # browser accepts that header only when it is a single origin (or `*`) equal to the page's
+      # own origin. A comma-separated list reads like a list but is emitted as one literal value,
+      # so every preflighted request -- any request carrying `Authorization` -- fails in the
+      # browser as `TypeError: Failed to fetch` while the identical request succeeds from curl,
+      # which never preflights. Local development needs no entry here at all: `make web` proxies
+      # `/api/*` to the local API through a Next rewrite, so the browser is same-origin and never
+      # sends a preflight. A localhost entry in this list therefore bought nothing and broke the
+      # deployed console.
+      Cors:
+        AllowMethods: "'GET,POST,OPTIONS'"
+        AllowHeaders: "'Content-Type,Authorization'"
+        AllowOrigin: !Sub "'https://main.${AmplifyApp.AppId}.amplifyapp.com'"
 
-  # ============================================================================
-  # Step Functions — Standing Order Workflow
-  # ============================================================================
+      # Gateway responses belong IN this definition, not in standalone
+      # AWS::ApiGateway::GatewayResponse resources. A standalone GatewayResponse is applied from
+      # the stage's deployment snapshot, and that snapshot is a copy of the API definition -- which
+      # does not contain it -- so such an edit can read back correctly from the API while the live
+      # response is unchanged, and a later import of the definition resets it outright. That is the
+      # exact shape of a silent no-op, in the one place a reviewer is told to trust.
+      #
+      # API Gateway answers some requests ITSELF -- no token, an expired one, a malformed one, a
+      # throttled one -- and those refusals are produced before any Lambda runs, so the CORS
+      # headers the handler sets on its own replies never reach them. Unpatched, the browser sees
+      # a 401 with no `Access-Control-Allow-Origin`, refuses to hand the response to the console,
+      # and reports `TypeError: Failed to fetch` -- which the console cannot tell apart from the
+      # API being down. The result is the opposite of the design: a signed-out visitor reads
+      # "Is the API running? Start it with make api", and the deliberate "this screen needs a
+      # signed-in session" state is unreachable.
+      #
+      # UNAUTHORIZED and ACCESS_DENIED are declared on their own because a specific type takes
+      # precedence over DEFAULT_4XX, and leaving them out is the usual way to ship an API whose
+      # errors are invisible to its own frontend.
+      #
+      # `GatewayResponses` is honoured only for an API with an inline definition, and
+      # `MergeDefinitions` is what keeps SAM's routes: it merges the operations SAM generates from
+      # the Lambda Api events into this body instead of letting this body replace them.
+      #
+      # THE ONE ENTRY UNDER `paths` IS LOAD-BEARING AND IS NOT A ROUTE. SAM's merge reads
+      # `definition.get("paths") or {}`, so an EMPTY `paths:` is swapped for a throwaway dict, the
+      # generated operations are merged into that, and the API ends up with no methods at all --
+      # the deployment then fails with "The REST API doesn't contain any methods". A single entry
+      # keeps the map truthy, and the operation SAM generates for the same path and method
+      # replaces it wholesale, so nothing declared inside it reaches the API. /api/health is used
+      # because an Api event below declares exactly that path and method; if that event is ever
+      # removed, move this entry to a path that is still generated.
+      MergeDefinitions: true
+      DefinitionBody:
+        swagger: "2.0"
+        info:
+          title: !Ref AWS::StackName
+          version: "1.0"
+        paths:
+          /api/health:
+            get: {}
+      GatewayResponses:
+        UNAUTHORIZED:
+          StatusCode: 401
+          ResponseParameters:
+            Headers:
+              Access-Control-Allow-Origin: !Sub "'https://main.${AmplifyApp.AppId}.amplifyapp.com'"
+              Access-Control-Allow-Headers: "'Content-Type,Authorization'"
+              Access-Control-Allow-Methods: "'GET,POST,OPTIONS'"
+        ACCESS_DENIED:
+          StatusCode: 403
+          ResponseParameters:
+            Headers:
+              Access-Control-Allow-Origin: !Sub "'https://main.${AmplifyApp.AppId}.amplifyapp.com'"
+              Access-Control-Allow-Headers: "'Content-Type,Authorization'"
+              Access-Control-Allow-Methods: "'GET,POST,OPTIONS'"
+        MISSING_AUTHENTICATION_TOKEN:
+          StatusCode: 404
+          ResponseParameters:
+            Headers:
+              Access-Control-Allow-Origin: !Sub "'https://main.${AmplifyApp.AppId}.amplifyapp.com'"
+              Access-Control-Allow-Headers: "'Content-Type,Authorization'"
+              Access-Control-Allow-Methods: "'GET,POST,OPTIONS'"
+        DEFAULT_4XX:
+          ResponseParameters:
+            Headers:
+              Access-Control-Allow-Origin: !Sub "'https://main.${AmplifyApp.AppId}.amplifyapp.com'"
+              Access-Control-Allow-Headers: "'Content-Type,Authorization'"
+              Access-Control-Allow-Methods: "'GET,POST,OPTIONS'"
+        DEFAULT_5XX:
+          ResponseParameters:
+            Headers:
+              Access-Control-Allow-Origin: !Sub "'https://main.${AmplifyApp.AppId}.amplifyapp.com'"
+              Access-Control-Allow-Headers: "'Content-Type,Authorization'"
+              Access-Control-Allow-Methods: "'GET,POST,OPTIONS'"
 
-  StandingOrderStateMachine:
-    Type: AWS::Serverless::StateMachine
+        # `DEFAULT_5XX` is NOT enough for the 5xx a browser was bitten by. Three types take
+        # precedence over it, and one of them -- API_CONFIGURATION_ERROR -- is a 500 whose default
+        # body is literally `{"message":"Internal server error"}`. Measured on this stack: under
+        # load the api function's invocations were THROTTLED, API Gateway reported each one as that
+        # response, and because no entry here named it, the reply carried no
+        # `Access-Control-Allow-Origin` at all -- so the console showed `Failed to fetch` and told
+        # the worker to start a local server. That is the same failure mode as the unwritten 401
+        # above, one response type over, and the fix is the same: name the console's origin for
+        # the types that pre-empt the default. INTEGRATION_FAILURE (502) and INTEGRATION_TIMEOUT
+        # (504) are declared for the same reason -- a Lambda that fails or runs long is exactly
+        # when a reader most needs to be told what happened.
+        API_CONFIGURATION_ERROR:
+          StatusCode: 500
+          ResponseParameters:
+            Headers:
+              Access-Control-Allow-Origin: !Sub "'https://main.${AmplifyApp.AppId}.amplifyapp.com'"
+              Access-Control-Allow-Headers: "'Content-Type,Authorization'"
+              Access-Control-Allow-Methods: "'GET,POST,OPTIONS'"
+        INTEGRATION_FAILURE:
+          StatusCode: 502
+          ResponseParameters:
+            Headers:
+              Access-Control-Allow-Origin: !Sub "'https://main.${AmplifyApp.AppId}.amplifyapp.com'"
+              Access-Control-Allow-Headers: "'Content-Type,Authorization'"
+              Access-Control-Allow-Methods: "'GET,POST,OPTIONS'"
+        INTEGRATION_TIMEOUT:
+          StatusCode: 504
+          ResponseParameters:
+            Headers:
+              Access-Control-Allow-Origin: !Sub "'https://main.${AmplifyApp.AppId}.amplifyapp.com'"
+              Access-Control-Allow-Headers: "'Content-Type,Authorization'"
+              Access-Control-Allow-Methods: "'GET,POST,OPTIONS'"
+
+  # ==========================================================================
+  # Lambda -- one function per responsibility
+  # ==========================================================================
+
+  ApiHandler:
+    Type: AWS::Serverless::Function
     Properties:
-      Name: !Sub "${AWS::StackName}-standing-order"
-      Type: STANDARD
-      Logging:
-        Level: ALL
-        Destinations:
-          - CloudWatchLogsLogGroup:
-              LogGroupArn: !GetAtt StandingOrderLogGroup.Arn
-      Tracing:
-        Enabled: true
-      DefinitionUri: ../stepfunctions/standing-order.asl.json
-      DefinitionSubstitutions:
-        StageTripFunctionArn: !GetAtt StageTripHandler.Arn
-        ResolveObligationsFunctionArn: !GetAtt ResolveHandler.Arn
-        AuthorizeFunctionArn: !GetAtt StandingOrderHandler.Arn
-        CreateParchisFunctionArn: !GetAtt ParchiCreationHandler.Arn
-        ParchiAckWaiterFunctionArn: !GetAtt StepFunctionsTaskWaiter.Arn
-        SealParchisFunctionArn: !GetAtt ParchiSealHandler.Arn
-        AuditFunctionArn: !GetAtt AuditHandler.Arn
+      FunctionName: !Sub "${AWS::StackName}-api"
+      Handler: aadesh_aws.api_handler.handle
+      CodeUri: ../../build/placeholder/
+      Description: >
+        The HTTP skin. Reads a request, builds a Principal from the verified Cognito claims, and
+        calls the shared application. Every decision comes from aadesh_core.
+      MemorySize: 1024
+      Timeout: 60
+      # NO `ReservedConcurrentExecutions`, and that is a measured constraint rather than a choice:
+      #
+      #   Specified ReservedConcurrentExecutions for function decreases account's
+      #   UnreservedConcurrentExecution below its minimum value of [10].
+      #
+      # This account's ceiling is 10 concurrent executions and its unreserved floor is also 10, so
+      # NOTHING can be reserved in it -- not 3 for the console, not 1 for the ingest poll. The
+      # console's capacity therefore cannot be carved out here; it has to be kept free by bounding
+      # what the workflow may take, which is why `PendingAck` fans out to 5 rather than 10 and why
+      # every Lambda task retries `Lambda.TooManyRequestsException`. Without that, a burst of
+      # acknowledgements has the workflow and the console racing for the same ten slots, the api
+      # function loses, and API Gateway reports the loss as a 500 the console cannot read -- the
+      # `Failed to fetch` this deployment was taught to avoid, arriving by a different route.
+      Environment:
+        Variables:
+          AADESH_ALLOWED_ORIGIN: !Sub "https://main.${AmplifyApp.AppId}.amplifyapp.com"
+          AADESH_EXPLAIN_BACKEND: !Ref ExplainBackend
+          BEDROCK_MODEL_ID: !Ref BedrockModelId
+          BEDROCK_REGION: !Ref BedrockRegion
+          AADESH_STATION_ID: !Ref StationId
+          AADESH_EVENT_BUS: default
       Policies:
-        - LambdaInvokePolicy:
-            FunctionName: !Ref StageTripHandler
-        - LambdaInvokePolicy:
-            FunctionName: !Ref ResolveHandler
-        - LambdaInvokePolicy:
-            FunctionName: !Ref StandingOrderHandler
-        - LambdaInvokePolicy:
-            FunctionName: !Ref ParchiCreationHandler
-        - LambdaInvokePolicy:
-            FunctionName: !Ref StepFunctionsTaskWaiter
-        - LambdaInvokePolicy:
-            FunctionName: !Ref ParchiSealHandler
-        - LambdaInvokePolicy:
-            FunctionName: !Ref AuditHandler
+        - Statement:
+            - Sid: StateStore
+              Effect: Allow
+              Action:
+                - dynamodb:GetItem
+                - dynamodb:PutItem
+                - dynamodb:UpdateItem
+                - dynamodb:DeleteItem
+                - dynamodb:Query
+              Resource:
+                - !GetAtt ParchisTable.Arn
+                - !Sub "${ParchisTable.Arn}/index/*"
+                - !GetAtt OperationalTable.Arn
+                - !GetAtt StandingOrdersTable.Arn
+                - !Sub "${StandingOrdersTable.Arn}/index/*"
+                - !GetAtt TriggerRunsTable.Arn
+                - !GetAtt SitesTable.Arn
+            - Sid: ReadCorpusBytes
+              Effect: Allow
+              Action: [s3:GetObject, s3:ListBucket]
+              Resource: [!GetAtt CorpusBucket.Arn, !Sub "${CorpusBucket.Arn}/*"]
+            - Sid: ReadOnlyReadings
+              Effect: Allow
+              Action: [dynamodb:GetItem, dynamodb:Query]
+              Resource: !GetAtt ReadingsTable.Arn
+            - Sid: ResumeWaitingExecution
+              Effect: Allow
+              Action: [states:SendTaskSuccess]
+              # Referenced by NAME rather than !Ref. The state machine invokes this function's
+              # siblings, so a !Ref here would make the two resources depend on each other and
+              # CloudFormation would refuse the stack. The name is still exactly one ARN.
+              Resource: !Sub "arn:aws:states:${AWS::Region}:${AWS::AccountId}:stateMachine:${AWS::StackName}-standing-order"
+            - Sid: PublishTriggerEvent
+              Effect: Allow
+              Action: [events:PutEvents]
+              Resource: !Sub "arn:aws:events:${AWS::Region}:${AWS::AccountId}:event-bus/default"
+            - !If
+              - UseModelAndModelId
+              - Sid: RephraseOnly
+                Effect: Allow
+                Action: [bedrock:InvokeModel]
+                Resource:
+                  # Foundation-model ARNs carry NO account id -- they are region-scoped, and
+                  # an ARN with the account in that slot does not match anything.
+                  - !Sub "arn:aws:bedrock:${BedrockRegion}::foundation-model/${BedrockModelId}"
+              - !Ref AWS::NoValue
+      Events:
+        # Authenticated routes: everything under /api except the five listed below.
+        #
+        # The catch-all is two events, GET and POST, rather than one `Method: ANY`, and that is
+        # deliberate. SAM's `MergeDefinitions` writes the event's own method name straight into the
+        # definition while the operation it generated is keyed by the normalized name
+        # (`x-amazon-apigateway-any-method`), and Swagger 2.0 has no `any` -- so API Gateway drops
+        # the operation as an unknown key, without failing the import, and the catch-all silently
+        # disappears. The stack reports success and every authenticated screen 404s. GET and POST
+        # are the methods `web/lib/api.ts` issues and nothing else; a method outside them is refused
+        # by the gateway instead of being answered 405 by the handler, which is the one behavioural
+        # difference from `ANY`.
+        ApiProxyGet:
+          Type: Api
+          Properties:
+            Path: /{proxy+}
+            Method: GET
+            RestApiId: !Ref AadeshApi
+        ApiProxyPost:
+          Type: Api
+          Properties:
+            Path: /{proxy+}
+            Method: POST
+            RestApiId: !Ref AadeshApi
+        # Public by construction: protected by the opaque token, or aggregate-only.
+        WorkerView:
+          Type: Api
+          Properties:
+            Path: /api/worker/view
+            Method: POST
+            RestApiId: !Ref AadeshApi
+            Auth: { Authorizer: NONE }
+        WorkerAcknowledge:
+          Type: Api
+          Properties:
+            Path: /api/worker/acknowledge
+            Method: POST
+            RestApiId: !Ref AadeshApi
+            Auth: { Authorizer: NONE }
+        PublicImpact:
+          Type: Api
+          Properties:
+            Path: /api/impact
+            Method: GET
+            RestApiId: !Ref AadeshApi
+            Auth: { Authorizer: NONE }
+        Reading:
+          Type: Api
+          Properties:
+            Path: /api/reading/latest
+            Method: GET
+            RestApiId: !Ref AadeshApi
+            Auth: { Authorizer: NONE }
+        Health:
+          Type: Api
+          Properties:
+            Path: /api/health
+            Method: GET
+            RestApiId: !Ref AadeshApi
+            Auth: { Authorizer: NONE }
 
-  StandingOrderLogGroup:
-    Type: AWS::Logs::LogGroup
+  IngestHandler:
+    Type: AWS::Serverless::Function
     Properties:
-      LogGroupName: !Sub "/aws/states/${AWS::StackName}-standing-order"
-      RetentionInDays: 90
-
-  # ============================================================================
-  # Additional Lambda functions for Step Functions workflow
-  # ============================================================================
+      FunctionName: !Sub "${AWS::StackName}-ingest"
+      Handler: aadesh_aws.ingest_handler.handle
+      CodeUri: ../../build/placeholder/
+      Description: >
+        Scheduled station-reading fetch. Writes a provenance-stamped reading to DynamoDB, or
+        writes nothing and says why. It never decides a stage: a stage comes from a CAQM order.
+      Timeout: 60
+      Environment:
+        Variables:
+          AADESH_STATION_ID: !Ref StationId
+          OPENAQ_BASE_URL: "https://api.openaq.org/v3"
+          AADESH_READING_STALENESS_SECONDS: "5400"
+      Policies:
+        - Statement:
+            - Sid: WriteReadingEvidence
+              Effect: Allow
+              Action: [dynamodb:PutItem, dynamodb:UpdateItem, dynamodb:GetItem, dynamodb:Query]
+              Resource: !GetAtt ReadingsTable.Arn
+      Events:
+        Every15Minutes:
+          Type: Schedule
+          Properties:
+            Description: Fetch the nearest station reading
+            Schedule: rate(15 minutes)
+            Enabled: true
 
   StageTripHandler:
     Type: AWS::Serverless::Function
     Properties:
       FunctionName: !Sub "${AWS::StackName}-stage-trip"
       Handler: aadesh_aws.stage_trip_handler.handle
-      CodeUri: ../../services/
-      Description: Determine invoked stage from corpus + event context
-      Timeout: 30
-      Environment:
-        Variables:
-          AADESH_TABLE_SITES: !Ref SitesTable
-          AADESH_SOURCE_BUCKET: !Ref CorpusBucket
-          AADESH_CEDAR_POLICY_PATH: /var/task/infra/cedar/policies.cedar
-          AWS_ENDPOINT_URL: ""
+      CodeUri: ../../build/placeholder/
+      Description: Reads the invoked stage from the re-proved corpus.
       Policies:
-        - DynamoDBReadPolicy:
-            TableName: !Ref SitesTable
-        - S3ReadPolicy:
-            BucketName: !Ref CorpusBucket
         - Statement:
             - Effect: Allow
-              Action:
-                - logs:CreateLogGroup
-                - logs:CreateLogStream
-                - logs:PutLogEvents
-              Resource: !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/${AWS::StackName}-stage-trip:*"
+              Action: [dynamodb:GetItem, dynamodb:Query]
+              Resource: [!GetAtt SitesTable.Arn, !GetAtt ParchisTable.Arn, !Sub "${ParchisTable.Arn}/index/*"]
+            - Effect: Allow
+              Action: [s3:GetObject, s3:ListBucket]
+              Resource: [!GetAtt CorpusBucket.Arn, !Sub "${CorpusBucket.Arn}/*"]
 
-  ParchiCreationHandler:
+  ResolveHandler:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub "${AWS::StackName}-resolve"
+      Handler: aadesh_aws.resolve_handler.handle
+      CodeUri: ../../build/placeholder/
+      Description: Determines which cited clauses apply, against the re-proved corpus.
+      Policies:
+        - Statement:
+            - Effect: Allow
+              Action: [dynamodb:GetItem, dynamodb:Query]
+              Resource: !GetAtt SitesTable.Arn
+            - Effect: Allow
+              Action: [s3:GetObject, s3:ListBucket]
+              Resource: [!GetAtt CorpusBucket.Arn, !Sub "${CorpusBucket.Arn}/*"]
+
+  AuthorizeHandler:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub "${AWS::StackName}-authorize"
+      Handler: aadesh_aws.standing_order_handler.handle
+      CodeUri: ../../build/placeholder/
+      Description: Re-checks that the signed pre-commitment is still in force at FIRE time.
+      Policies:
+        - Statement:
+            - Effect: Allow
+              Action: [dynamodb:GetItem, dynamodb:Query]
+              Resource: !GetAtt StandingOrdersTable.Arn
+
+  CreateParchisHandler:
     Type: AWS::Serverless::Function
     Properties:
       FunctionName: !Sub "${AWS::StackName}-create-parchis"
       Handler: aadesh_aws.parchi_creation_handler.handle
-      CodeUri: ../../services/
-      Description: Create Parchis for all rostered workers when Standing Order triggers
+      CodeUri: ../../build/placeholder/
+      Description: Opens one Parchi per rostered worker, idempotently on the shared execution id.
       Timeout: 60
-      MemorySize: 512
-      Environment:
-        Variables:
-          AADESH_TABLE_PARCHIS: !Ref ParchisTable
-          AADESH_TABLE_SITES: !Ref SitesTable
-          AADESH_SOURCE_BUCKET: !Ref CorpusBucket
-          AADESH_CEDAR_POLICY_PATH: /var/task/infra/cedar/policies.cedar
-          AWS_ENDPOINT_URL: ""
       Policies:
-        - DynamoDBCrudPolicy:
-            TableName: !Ref ParchisTable
-        - DynamoDBReadPolicy:
-            TableName: !Ref SitesTable
-        - S3ReadPolicy:
-            BucketName: !Ref CorpusBucket
         - Statement:
             - Effect: Allow
-              Action:
-                - logs:CreateLogGroup
-                - logs:CreateLogStream
-                - logs:PutLogEvents
-              Resource: !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/${AWS::StackName}-create-parchis:*"
+              Action: [dynamodb:GetItem, dynamodb:PutItem, dynamodb:UpdateItem, dynamodb:Query]
+              Resource:
+                - !GetAtt ParchisTable.Arn
+                - !Sub "${ParchisTable.Arn}/index/*"
+                - !GetAtt OperationalTable.Arn
+                - !GetAtt SitesTable.Arn
+            - Effect: Allow
+              Action: [s3:GetObject, s3:ListBucket]
+              Resource: [!GetAtt CorpusBucket.Arn, !Sub "${CorpusBucket.Arn}/*"]
 
-  ParchiSealHandler:
+  ParchiAckWaiter:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub "${AWS::StackName}-parchi-ack-waiter"
+      Handler: aadesh_aws.task_waiter.handle
+      CodeUri: ../../build/placeholder/
+      Description: >
+        Parks a Step Functions task token against a Parchi. Called with
+        lambda:invoke.waitForTaskToken, so this function returning does NOT resume the machine --
+        only SendTaskSuccess does.
+      Timeout: 30
+      Policies:
+        - Statement:
+            - Effect: Allow
+              Action: [dynamodb:GetItem, dynamodb:Query, dynamodb:PutItem, dynamodb:DeleteItem]
+              Resource: [!GetAtt ParchisTable.Arn, !Sub "${ParchisTable.Arn}/index/*", !GetAtt OperationalTable.Arn]
+            - Effect: Allow
+              Action: [states:SendTaskSuccess]
+              Resource: !Sub "arn:aws:states:${AWS::Region}:${AWS::AccountId}:stateMachine:${AWS::StackName}-standing-order"
+
+  SealParchisHandler:
     Type: AWS::Serverless::Function
     Properties:
       FunctionName: !Sub "${AWS::StackName}-seal-parchis"
       Handler: aadesh_aws.parchi_seal_handler.handle
-      CodeUri: ../../services/
-      Description: Seal acknowledged Parchis over content hash
-      Timeout: 30
-      Environment:
-        Variables:
-          AADESH_TABLE_PARCHIS: !Ref ParchisTable
-          AWS_ENDPOINT_URL: ""
+      CodeUri: ../../build/placeholder/
+      Description: Freezes a confirmed Parchi over its content hash. Refuses anything else.
       Policies:
-        - DynamoDBCrudPolicy:
-            TableName: !Ref ParchisTable
         - Statement:
             - Effect: Allow
-              Action:
-                - logs:CreateLogGroup
-                - logs:CreateLogStream
-                - logs:PutLogEvents
-              Resource: !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/${AWS::StackName}-seal-parchis:*"
+              Action: [dynamodb:GetItem, dynamodb:Query, dynamodb:PutItem, dynamodb:UpdateItem]
+              Resource: [!GetAtt ParchisTable.Arn, !Sub "${ParchisTable.Arn}/index/*"]
 
   AuditHandler:
     Type: AWS::Serverless::Function
     Properties:
       FunctionName: !Sub "${AWS::StackName}-audit"
       Handler: aadesh_aws.audit_handler.handle
-      CodeUri: ../../services/
-      Description: Write final audit record for Standing Order execution
-      Timeout: 30
-      Environment:
-        Variables:
-          AADESH_TABLE_PARCHIS: !Ref ParchisTable
-          AADESH_TABLE_STANDING_ORDERS: !Ref StandingOrdersTable
-          AWS_ENDPOINT_URL: ""
+      CodeUri: ../../build/placeholder/
+      Description: Writes one audit line for the workflow run, including on the failure path.
       Policies:
-        - DynamoDBCrudPolicy:
-            TableName: !Ref ParchisTable
-        - DynamoDBWritePolicy:
-            TableName: !Ref StandingOrdersTable
         - Statement:
             - Effect: Allow
-              Action:
-                - logs:CreateLogGroup
-                - logs:CreateLogStream
-                - logs:PutLogEvents
-              Resource: !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/${AWS::StackName}-audit:*"
+              Action: [dynamodb:GetItem, dynamodb:Query]
+              Resource: [!GetAtt ParchisTable.Arn, !Sub "${ParchisTable.Arn}/index/*"]
 
-  # ============================================================================
-  # EventBridge — Scheduled and event-driven triggers
-  # ============================================================================
+  # ==========================================================================
+  # Step Functions -- the durable acknowledgement window
+  # ==========================================================================
 
-  StandingOrderEventsRule:
+  StandingOrderStateMachine:
+    Type: AWS::Serverless::StateMachine
+    Properties:
+      Name: !Sub "${AWS::StackName}-standing-order"
+      Type: STANDARD
+      Tracing:
+        Enabled: true
+      Logging:
+        Level: ALL
+        IncludeExecutionData: false
+        Destinations:
+          - CloudWatchLogsLogGroup:
+              LogGroupArn: !GetAtt WorkflowLogGroup.Arn
+      DefinitionUri: ../stepfunctions/standing-order.asl.json
+      DefinitionSubstitutions:
+        AuthorizeFunctionArn: !GetAtt AuthorizeHandler.Arn
+        StageTripFunctionArn: !GetAtt StageTripHandler.Arn
+        ResolveObligationsFunctionArn: !GetAtt ResolveHandler.Arn
+        CreateParchisFunctionArn: !GetAtt CreateParchisHandler.Arn
+        ParchiAckWaiterFunctionArn: !GetAtt ParchiAckWaiter.Arn
+        SealParchisFunctionArn: !GetAtt SealParchisHandler.Arn
+        AuditFunctionArn: !GetAtt AuditHandler.Arn
+      Policies:
+        - LambdaInvokePolicy: { FunctionName: !Ref AuthorizeHandler }
+        - LambdaInvokePolicy: { FunctionName: !Ref StageTripHandler }
+        - LambdaInvokePolicy: { FunctionName: !Ref ResolveHandler }
+        - LambdaInvokePolicy: { FunctionName: !Ref CreateParchisHandler }
+        - LambdaInvokePolicy: { FunctionName: !Ref ParchiAckWaiter }
+        - LambdaInvokePolicy: { FunctionName: !Ref SealParchisHandler }
+        - LambdaInvokePolicy: { FunctionName: !Ref AuditHandler }
+        - Statement:
+            - Sid: WriteExecutionLogs
+              Effect: Allow
+              Action: [logs:CreateLogDelivery, logs:GetLogDelivery, logs:UpdateLogDelivery, logs:DeleteLogDelivery, logs:ListLogDeliveries, logs:PutResourcePolicy, logs:DescribeResourcePolicies, logs:DescribeLogGroups]
+              Resource: "*"
+            - Sid: PublishTraces
+              Effect: Allow
+              Action: [xray:PutTraceSegments, xray:PutTelemetryRecords, xray:GetSamplingRules, xray:GetSamplingTargets]
+              Resource: "*"
+
+  WorkflowLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/aws/vendedlogs/states/${AWS::StackName}-standing-order"
+      RetentionInDays: !Ref LogRetentionDays
+
+  # ==========================================================================
+  # EventBridge -- the schedule, and the event-routed trigger
+  # ==========================================================================
+
+  StageInvocationRule:
     Type: AWS::Events::Rule
     Properties:
-      Name: !Sub "${AWS::StackName}-standing-order-events"
-      Description: Trigger Standing Order workflow when stage invocation event detected
+      Name: !Sub "${AWS::StackName}-stage-invocation"
+      Description: >
+        Routes a StageInvocation event to the Standing Order workflow. The workflow is started
+        by an EVENT rather than by a direct API call so the trigger is auditable and replayable
+        independently of the request that published it.
       EventPattern:
-        source:
-          - "aadesh.events"
-        detail-type:
-          - "StageInvocation"
+        source: ["aadesh.events"]
+        detail-type: ["StageInvocation"]
       State: ENABLED
       Targets:
-        - Arn: !Ref StandingOrderStateMachine
-          Id: StandingOrderWorkflow
-          RoleArn: !GetAtt LambdaExecutionRole.Arn
+        - Id: StandingOrderWorkflow
+          Arn: !Ref StandingOrderStateMachine
+          RoleArn: !GetAtt EventBridgeToStepFunctionsRole.Arn
+          # InputPath, not an InputTransformer. The machine's input IS the event's detail, and
+          # EventBridge passes a JSONPath-selected sub-object through verbatim. An
+          # InputTransformer with an InputTemplate of "<detail>" looks equivalent and is not:
+          # it failed every invocation (FailedInvocations, no execution started), because the
+          # template must render a JSON string and `<detail>` renders an object. The failure is
+          # silent -- the rule reports it in a metric and nothing starts.
+          InputPath: "$.detail"
 
-  # ============================================================================
-  # IAM Roles
-  # ============================================================================
-
-  LambdaExecutionRole:
+  EventBridgeToStepFunctionsRole:
     Type: AWS::IAM::Role
     Properties:
-      RoleName: !Sub "${AWS::StackName}-lambda-execution"
       AssumeRolePolicyDocument:
         Version: "2012-10-17"
         Statement:
           - Effect: Allow
-            Principal:
-              Service:
-                - lambda.amazonaws.com
-                - states.amazonaws.com
+            Principal: { Service: events.amazonaws.com }
             Action: sts:AssumeRole
-      ManagedPolicyArns:
-        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
-        - arn:aws:iam::aws:policy/AWSXRayDaemonWriteAccess
       Policies:
-        - PolicyName: StepFunctionsExecution
+        - PolicyName: StartTheStandingOrderWorkflow
           PolicyDocument:
             Version: "2012-10-17"
             Statement:
               - Effect: Allow
-                Action:
-                  - states:StartExecution
-                  - states:DescribeExecution
-                  - states:GetExecutionHistory
+                Action: [states:StartExecution]
                 Resource: !Ref StandingOrderStateMachine
-        - PolicyName: EventBridgePutEvents
-          PolicyDocument:
-            Version: "2012-10-17"
-            Statement:
-              - Effect: Allow
-                Action:
-                  - events:PutEvents
-                Resource: !GetAtt EventBus.Arn
 
-  EventBridgePutEventsRole:
-    Type: AWS::IAM::Role
+  # ==========================================================================
+  # CloudWatch -- logs, a denial metric, alarms, a dashboard
+  # ==========================================================================
+
+  ApiLogGroup:
+    Type: AWS::Logs::LogGroup
     Properties:
-      RoleName: !Sub "${AWS::StackName}-eventbridge-role"
-      AssumeRolePolicyDocument:
-        Version: "2012-10-17"
-        Statement:
-          - Effect: Allow
-            Principal:
-              Service: events.amazonaws.com
-            Action: sts:AssumeRole
-      Policies:
-        - PolicyName: InvokeStepFunctions
-          PolicyDocument:
-            Version: "2012-10-17"
-            Statement:
-              - Effect: Allow
-                Action:
-                  - states:StartExecution
-                Resource: !Ref StandingOrderStateMachine
-
-  # ============================================================================
-  # CloudWatch — Alarms and Dashboard
-  # ============================================================================
+      LogGroupName: !Sub "/aws/lambda/${AWS::StackName}-api"
+      RetentionInDays: !Ref LogRetentionDays
 
   ApiErrorsAlarm:
     Type: AWS::CloudWatch::Alarm
     Properties:
       AlarmName: !Sub "${AWS::StackName}-api-errors"
-      AlarmDescription: API handler returning 5xx errors
+      AlarmDescription: The API handler returned 5xx errors. An authorization outage shows here.
       Namespace: AWS/Lambda
       MetricName: Errors
       Dimensions:
-        - Name: FunctionName
-          Value: !Ref ApiHandler
+        - { Name: FunctionName, Value: !Ref ApiHandler }
       Statistic: Sum
       Period: 300
-      EvaluationPeriods: 2
+      EvaluationPeriods: 1
       Threshold: 5
       ComparisonOperator: GreaterThanThreshold
       TreatMissingData: notBreaching
 
-  LambdaDurationAlarm:
+  WorkflowFailuresAlarm:
     Type: AWS::CloudWatch::Alarm
     Properties:
-      AlarmName: !Sub "${AWS::StackName}-high-latency"
-      AlarmDescription: Lambda functions exceeding 25-second duration
-      Namespace: AWS/Lambda
-      MetricName: Duration
+      AlarmName: !Sub "${AWS::StackName}-workflow-failed"
+      AlarmDescription: A Standing Order execution failed before reaching its Audit step.
+      Namespace: AWS/States
+      MetricName: ExecutionsFailed
       Dimensions:
-        - Name: FunctionName
-          Value: !Ref ApiHandler
-      Statistic: p95
+        - { Name: StateMachineArn, Value: !Ref StandingOrderStateMachine }
+      Statistic: Sum
       Period: 300
-      EvaluationPeriods: 3
-      Threshold: 25000
-      ComparisonOperator: GreaterThanThreshold
+      EvaluationPeriods: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
 
   Dashboard:
     Type: AWS::CloudWatch::Dashboard
@@ -917,133 +983,91 @@ Resources:
         {
           "widgets": [
             {
-              "type": "log",
-              "x": 0,
-              "y": 0,
-              "width": 12,
-              "height": 6,
+              "type": "metric", "x": 0, "y": 0, "width": 12, "height": 6,
               "properties": {
+                "title": "API errors and latency",
                 "region": "${AWS::Region}",
-                "title": "API Errors",
-                "query": "fields @timestamp, @message | filter @message like /ERROR/ | sort @timestamp desc | limit 100",
-                "logGroupNames": ["/aws/lambda/${ApiHandler}"]
-              }
-            },
-            {
-              "type": "metric",
-              "x": 12,
-              "y": 0,
-              "width": 12,
-              "height": 6,
-              "properties": {
-                "region": "${AWS::Region}",
-                "title": "Lambda Errors & Duration",
+                "view": "timeSeries", "period": 300,
                 "metrics": [
                   [ "AWS/Lambda", "Errors", "FunctionName", "${ApiHandler}", { "stat": "Sum" } ],
                   [ ".", "Duration", ".", ".", { "stat": "p95" } ]
-                ],
-                "view": "timeSeries",
-                "period": 300
+                ]
               }
             },
             {
-              "type": "log",
-              "x": 0,
-              "y": 6,
-              "width": 12,
-              "height": 6,
+              "type": "metric", "x": 12, "y": 0, "width": 12, "height": 6,
               "properties": {
+                "title": "Standing Order executions",
                 "region": "${AWS::Region}",
-                "title": "Standing Order Workflow",
-                "query": "fields @timestamp, @message | filter @message like /StandingOrder/ | sort @timestamp desc",
-                "logGroupNames": ["/aws/states/${AWS::StackName}-standing-order"]
-              }
-            },
-            {
-              "type": "metric",
-              "x": 12,
-              "y": 6,
-              "width": 12,
-              "height": 6,
-              "properties": {
-                "region": "${AWS::Region}",
-                "title": "DynamoDB Throughput",
+                "view": "timeSeries", "period": 300,
                 "metrics": [
-                  [ "AWS/DynamoDB", "ConsumedReadCapacityUnits", "TableName", "${ParchisTable}", { "stat": "Sum" } ],
-                  [ ".", "ConsumedWriteCapacityUnits", ".", ".", { "stat": "Sum" } ]
-                ],
-                "view": "timeSeries",
-                "period": 300
+                  [ "AWS/States", "ExecutionsSucceeded", "StateMachineArn", "${StandingOrderStateMachine}", { "stat": "Sum" } ],
+                  [ ".", "ExecutionsFailed", ".", ".", { "stat": "Sum" } ]
+                ]
+              }
+            },
+            {
+              "type": "log", "x": 0, "y": 6, "width": 24, "height": 6,
+              "properties": {
+                "title": "Authorization denials (EMF metric Aadesh/Authorization)",
+                "region": "${AWS::Region}",
+                "query": "SOURCE '/aws/lambda/${AWS::StackName}-api' | fields @timestamp, event, detail.policy_id | filter @message like /_aws/ | sort @timestamp desc | limit 50"
+              }
+            },
+            {
+              "type": "metric", "x": 0, "y": 12, "width": 12, "height": 6,
+              "properties": {
+                "title": "Authorization denials per event",
+                "region": "${AWS::Region}",
+                "view": "timeSeries", "period": 300,
+                "metrics": [ [ "Aadesh/Authorization", "Denials", { "stat": "Sum" } ] ]
+              }
+            },
+            {
+              "type": "metric", "x": 12, "y": 12, "width": 12, "height": 6,
+              "properties": {
+                "title": "DynamoDB writes",
+                "region": "${AWS::Region}",
+                "view": "timeSeries", "period": 300,
+                "metrics": [
+                  [ "AWS/DynamoDB", "ConsumedWriteCapacityUnits", "TableName", "${ParchisTable}", { "stat": "Sum" } ],
+                  [ ".", "ConsumedReadCapacityUnits", ".", ".", { "stat": "Sum" } ]
+                ]
               }
             }
           ]
         }
 
-  # ============================================================================
-  # Outputs
-  # ============================================================================
-
 Outputs:
   ApiUrl:
-    Description: API Gateway endpoint URL
-    Value: !Sub "https://${AadeshApi}.execute-api.${AWS::Region}.amazonaws.com/${Environment}/"
+    Description: API Gateway base URL. Set NEXT_PUBLIC_API_BASE_URL to this.
+    Value: !Sub "https://${AadeshApi}.execute-api.${AWS::Region}.amazonaws.com/${Environment}"
 
-  ApiId:
-    Description: API Gateway ID
-    Value: !Ref AadeshApi
+  AmplifyAppId:
+    Description: Amplify Hosting app id (used to upload the console build)
+    Value: !GetAtt AmplifyApp.AppId
+
+  AmplifyDefaultDomain:
+    Description: The console URL
+    Value: !Sub "main.${AmplifyApp.AppId}.amplifyapp.com"
 
   UserPoolId:
-    Description: Cognito User Pool ID
     Value: !Ref UserPool
 
   UserPoolClientId:
-    Description: Cognito User Pool Client ID
     Value: !Ref UserPoolClient
 
-  UserPoolDomain:
-    Description: Cognito hosted UI domain
-    Value: !GetAtt UserPoolDomain.Domain
-
-  ParchisTableArn:
-    Description: Parchis DynamoDB table ARN
-    Value: !GetAtt ParchisTable.Arn
+  CognitoDomain:
+    Value: !Sub "https://aadesh-${AWS::AccountId}.auth.${AWS::Region}.amazoncognito.com"
 
   CorpusBucketName:
-    Description: S3 bucket for corpus documents
     Value: !Ref CorpusBucket
 
+  ParchisTableName:
+    Value: !Ref ParchisTable
+
   StandingOrderStateMachineArn:
-    Description: Step Functions state machine ARN
     Value: !Ref StandingOrderStateMachine
 
-  FrontendDomain:
-    Description: Amplify frontend domain (set after Amplify deployment)
-    Value: !Ref FrontendDomain
-
-  QrSigningSecret:
-    Description: Secret name for QR signing key (retrieve from Secrets Manager)
-    Value: !Ref QrSigningSecret
-
-# ============================================================================
-# Parameters not yet defined above (referenced in template)
-# ============================================================================
-
-  StationId:
-    Type: String
-    Default: ""
-    Description: Nearest CPCB station ID for this site
-
-  AWSEndpointUrl:
-    Type: String
-    Default: ""
-    Description: LocalStack endpoint URL for local testing (empty for real AWS)
-
-  FrontendDomain:
-    Type: String
-    Default: ""
-    Description: Amplify app domain (set post-deployment)
-
-  QrSigningSecret:
-    Type: String
-    Default: ""
-    Description: QR token signing secret (stored in Secrets Manager in prod)
+  ApiLogGroupName:
+    Value: !Ref ApiLogGroup

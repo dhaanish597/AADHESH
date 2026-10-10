@@ -192,3 +192,28 @@ def test_asl_uses_waitForTaskToken_for_pending_ack() -> None:
     assert "waitForTaskToken" in resource, (
         f"PendingAck iterator must use waitForTaskToken, got {resource}"
     )
+
+
+def test_the_acknowledgement_wait_declares_a_timeout() -> None:
+    """A `lambda:invoke.waitForTaskToken` task with no TimeoutSeconds defaults to ONE YEAR.
+
+    With one unscanned QR per execution that is a year of billing, and -- worse for this
+    machine -- the `AckTimeout` branch becomes unreachable, so the state that exists to report
+    "this worker did not answer" is dead code and an expired wait can only be reported as a
+    failed execution.
+    """
+    asl = _load_asl()
+    await_state = asl["States"]["PendingAck"]["Iterator"]["States"]["AwaitWorkerAck"]
+
+    assert await_state["TimeoutSeconds"] > 0
+    assert "HeartbeatSeconds" not in await_state, (
+        "a callback task has no heartbeat to send; HeartbeatSeconds would report an unasked "
+        "question as an unanswered one"
+    )
+    assert any(catcher.get("Next") == "AckTimeout" for catcher in await_state.get("Catch", [])), (
+        "the timeout path must reach AckTimeout, or the timeout branch is unreachable"
+    )
+    assert (
+        asl["States"]["PendingAck"]["Iterator"]["States"]["AckTimeout"]["Result"]["acknowledged"]
+        is False
+    )

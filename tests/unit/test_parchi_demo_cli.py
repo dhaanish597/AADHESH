@@ -107,14 +107,10 @@ def test_worker_view_exposes_only_the_verified_citations_attached_to_its_parchi(
     payload = next(item["payload"] for item in qr["workers"] if item["payload"])
 
     view = application.worker_view(payload)
-    obligations = {
-        item.obligation_id: item for item in LocalFileCorpus(CORPUS).obligations()
-    }
+    obligations = {item.obligation_id: item for item in LocalFileCorpus(CORPUS).obligations()}
 
     assert view["citations"]
-    assert {item["obligation_id"] for item in view["citations"]} <= set(
-        view["obligation_ids"]
-    )
+    assert {item["obligation_id"] for item in view["citations"]} <= set(view["obligation_ids"])
     for citation in view["citations"]:
         expected = obligations[citation["obligation_id"]].citation
         assert citation["source_quote"] == expected.quote

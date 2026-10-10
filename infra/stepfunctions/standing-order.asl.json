@@ -1,13 +1,14 @@
 {
-  "Comment": "Standing Order machine. Durably holds PENDING_ACK across hours via lambda:invoke.waitForTaskToken. No frontend timer.",
+  "Comment": "Aadesh Standing Order machine. The state names and the Next chain here are asserted, state by state, against aadesh_core.standing_order.machine by tests/unit/test_asl_matches_core_machine.py, and the graph properties -- one durable wait, no timer, no route to the seal that skips the acknowledgement -- by tests/verification/test_workflow_contract.py. The Lambda ARNs are ${...FunctionArn} substitutions resolved by the SAM template, so the deployed machine calls THIS stack's functions rather than a name it guessed.",
   "StartAt": "StageTrip",
   "States": {
     "StageTrip": {
       "Type": "Task",
-      "Resource": "arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:aadesh-stage-trip",
+      "Comment": "The invoked stage is read from the corpus. It is never computed from an AQI number.",
+      "Resource": "${StageTripFunctionArn}",
       "Retry": [
         {
-          "ErrorEquals": ["Lambda.ServiceException", "Lambda.AWSLambdaException", "Lambda.SdkClientException"],
+          "ErrorEquals": ["Lambda.ServiceException", "Lambda.AWSLambdaException", "Lambda.SdkClientException", "Lambda.TooManyRequestsException"],
           "IntervalSeconds": 2,
           "MaxAttempts": 3,
           "BackoffRate": 2
@@ -15,24 +16,22 @@
       ],
       "Catch": [
         {
+          "Comment": "A catcher carries only ErrorEquals, Next and ResultPath. A ResultSelector belongs on the state, not on the catcher, so it is not used here.",
           "ErrorEquals": ["States.ALL"],
           "Next": "Audit",
-          "ResultPath": "$.error",
-          "ResultSelector": {
-            "status": "failed",
-            "reason.$": "$.error.Message"
-          }
+          "ResultPath": "$.error"
         }
       ],
-      "Next": "ResolveObligations",
-      "ResultPath": "$.trip"
+      "ResultPath": "$.trip",
+      "Next": "ResolveObligations"
     },
     "ResolveObligations": {
       "Type": "Task",
-      "Resource": "arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:aadesh-resolve-obligations",
+      "Comment": "Which cited clauses apply, against a corpus that was just re-proved.",
+      "Resource": "${ResolveObligationsFunctionArn}",
       "Retry": [
         {
-          "ErrorEquals": ["Lambda.ServiceException", "Lambda.AWSLambdaException", "Lambda.SdkClientException"],
+          "ErrorEquals": ["Lambda.ServiceException", "Lambda.AWSLambdaException", "Lambda.SdkClientException", "Lambda.TooManyRequestsException"],
           "IntervalSeconds": 2,
           "MaxAttempts": 3,
           "BackoffRate": 2
@@ -45,15 +44,16 @@
           "ResultPath": "$.error"
         }
       ],
-      "Next": "Authorize",
-      "ResultPath": "$.resolution"
+      "ResultPath": "$.resolution",
+      "Next": "Authorize"
     },
     "Authorize": {
       "Type": "Task",
-      "Resource": "arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:aadesh-authorize-standing-order",
+      "Comment": "The order was signed days ago. This asks whether it is still in force NOW.",
+      "Resource": "${AuthorizeFunctionArn}",
       "Retry": [
         {
-          "ErrorEquals": ["Lambda.ServiceException", "Lambda.AWSLambdaException", "Lambda.SdkClientException"],
+          "ErrorEquals": ["Lambda.ServiceException", "Lambda.AWSLambdaException", "Lambda.SdkClientException", "Lambda.TooManyRequestsException"],
           "IntervalSeconds": 2,
           "MaxAttempts": 3,
           "BackoffRate": 2
@@ -66,15 +66,16 @@
           "ResultPath": "$.error"
         }
       ],
-      "Next": "CreateParchis",
-      "ResultPath": "$.authorization"
+      "ResultPath": "$.authorization",
+      "Next": "CreateParchis"
     },
     "CreateParchis": {
       "Type": "Task",
-      "Resource": "arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:aadesh-create-parchis",
+      "Comment": "Idempotent on the execution id the API already used, so a retry cannot mint a second set.",
+      "Resource": "${CreateParchisFunctionArn}",
       "Retry": [
         {
-          "ErrorEquals": ["Lambda.ServiceException", "Lambda.AWSLambdaException", "Lambda.SdkClientException"],
+          "ErrorEquals": ["Lambda.ServiceException", "Lambda.AWSLambdaException", "Lambda.SdkClientException", "Lambda.TooManyRequestsException"],
           "IntervalSeconds": 2,
           "MaxAttempts": 3,
           "BackoffRate": 2
@@ -87,28 +88,33 @@
           "ResultPath": "$.error"
         }
       ],
-      "Next": "PendingAck",
-      "ResultPath": "$.parchis"
+      "ResultPath": "$.parchis",
+      "Next": "PendingAck"
     },
     "PendingAck": {
       "Type": "Map",
+      "Comment": "One branch per displaced worker, each parked on its own task token. The machine holds PENDING_ACK here -- across a shift change, a night, a next-morning walk back to the site. No Lambda can hold that, and no timer may stand in for it.",
+      "ItemsPath": "$.parchis.parchis",
+      "MaxConcurrency": 5,
       "Iterator": {
         "StartAt": "BuildItem",
         "States": {
           "BuildItem": {
             "Type": "Pass",
+            "Comment": "The barrier between the machine's data and the waiter's: it narrows the iteration's item to exactly the three facts the waiter must know, and nothing else. NOTE on the paths -- with the classic Iterator form, EACH ITERATION'S INPUT IS THE ITEM, so `$.parchi_id` reads a field of the item and `$$.Map.Item.Value` is NOT available: a definition using `$$.Map.Item.Value.parchi_id` validates against the schema and then fails at runtime with 'JSONPath could not be found'. That was measured, not assumed.",
             "Parameters": {
-              "parchi_id.$": "$$.Map.Item.Value",
-              "worker_id.$": "$.worker_ids[$$.Map.Item.Index]",
+              "parchi_id.$": "$.parchi_id",
+              "worker_id.$": "$.worker_id",
               "site_id.$": "$.site_id"
             },
             "Next": "AwaitWorkerAck"
           },
           "AwaitWorkerAck": {
             "Type": "Task",
+            "Comment": "Parks this branch's task token. It resumes only on a SendTaskSuccess from the acknowledgement path -- never on a clock. TimeoutSeconds is the acknowledgement window (24 h, matching the token's own TTL); without it Step Functions would default to a year. HeartbeatSeconds is deliberately absent: a cb-only task has no heartbeat to send, and one would fail the wait on a worker who was simply still walking to the site, reporting 'no answer' about a question that was never withdrawn.",
             "Resource": "arn:aws:states:::lambda:invoke.waitForTaskToken",
             "Parameters": {
-              "FunctionName": "arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:aadesh-parchi-ack-waiter",
+              "FunctionName": "${ParchiAckWaiterFunctionArn}",
               "Payload": {
                 "parchi_id.$": "$.parchi_id",
                 "worker_id.$": "$.worker_id",
@@ -116,9 +122,10 @@
                 "task_token.$": "$$.Task.Token"
               }
             },
+            "TimeoutSeconds": 86400,
             "Retry": [
               {
-                "ErrorEquals": ["Lambda.ServiceException", "Lambda.AWSLambdaException", "Lambda.SdkClientException"],
+                "ErrorEquals": ["Lambda.ServiceException", "Lambda.AWSLambdaException", "Lambda.SdkClientException", "Lambda.TooManyRequestsException"],
                 "IntervalSeconds": 2,
                 "MaxAttempts": 3,
                 "BackoffRate": 2
@@ -126,6 +133,7 @@
             ],
             "Catch": [
               {
+                "Comment": "A worker who did not answer must not fail the whole execution.",
                 "ErrorEquals": ["States.ALL"],
                 "Next": "AckTimeout",
                 "ResultPath": "$.error"
@@ -135,32 +143,33 @@
           },
           "AckTimeout": {
             "Type": "Pass",
-            "End": true,
+            "Comment": "The branch's honest terminus. It says unacknowledged, so nothing downstream can read a missing confirmation as a confirmation.",
             "Result": {
               "parchi_id.$": "$.parchi_id",
               "acknowledged": false,
               "reason": "worker did not acknowledge within the waiting window"
-            }
+            },
+            "End": true
           }
         }
       },
-      "ItemsPath": "$.parchi_ids",
-      "MaxConcurrency": 10,
       "Retry": [],
-      "Next": "WorkerAcknowledgements",
-      "ResultPath": "$.ack_results"
+      "ResultPath": "$.ack_results",
+      "Next": "WorkerAcknowledgements"
     },
     "WorkerAcknowledgements": {
       "Type": "Pass",
-      "Next": "SealParchis",
-      "ResultPath": "$.acknowledgements"
+      "Comment": "The join. Every branch above has settled -- acknowledged or timed out -- before the machine reaches the seal, which is why no route can seal a Parchi nobody was asked about.",
+      "ResultPath": "$.acknowledgements",
+      "Next": "SealParchis"
     },
     "SealParchis": {
       "Type": "Task",
-      "Resource": "arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:aadesh-seal-parchis",
+      "Comment": "Freezes the Parchis the workers actually confirmed. The domain refuses to seal anything else, so a retry can never fabricate a sealed record.",
+      "Resource": "${SealParchisFunctionArn}",
       "Retry": [
         {
-          "ErrorEquals": ["Lambda.ServiceException", "Lambda.AWSLambdaException", "Lambda.SdkClientException"],
+          "ErrorEquals": ["Lambda.ServiceException", "Lambda.AWSLambdaException", "Lambda.SdkClientException", "Lambda.TooManyRequestsException"],
           "IntervalSeconds": 2,
           "MaxAttempts": 3,
           "BackoffRate": 2
@@ -173,16 +182,18 @@
           "ResultPath": "$.error"
         }
       ],
-      "Next": "Audit",
-      "ResultPath": "$.sealed"
+      "ResultPath": "$.sealed",
+      "Next": "Audit"
     },
     "Audit": {
       "Type": "Task",
-      "Resource": "arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:aadesh-standing-order-audit",
+      "Comment": "One line that the run happened, and what it concluded. It runs on the failure path too, and it cannot fail open: a Catch here would let a lost audit line be a silent success.",
+      "Resource": "${AuditFunctionArn}",
+      "InputPath": "$",
       "Retry": [],
       "Catch": [],
-      "End": true,
-      "ResultPath": "$.audit"
+      "ResultPath": "$.audit",
+      "End": true
     }
   }
 }
