@@ -258,7 +258,7 @@ export default function SupervisorPage() {
   }) ?? [];
 
   return (
-    <div className="mx-auto max-w-5xl px-5 py-8 lg:px-10 lg:py-10">
+    <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6 lg:px-8">
       <header className="flex flex-wrap items-end justify-between gap-4 border-b border-line pb-5">
         <div>
           <div className="label">Supervisor console</div>
@@ -301,7 +301,24 @@ export default function SupervisorPage() {
       {data && (
         <div className="mt-6 space-y-6">
           {/* ---------------------------------------------------- operations workspace */}
-          <OperationsWorkspace payload={data} error={error} busy={busy}>
+          <OperationsWorkspace
+            payload={data}
+            error={error}
+            busy={busy}
+            selectedObject={selectedObject}
+            onSelectObject={(obj) => {
+              let matchedKey: SceneObjectKey | null = null;
+              if (obj === "activity-zone" || obj === "zone-piling") matchedKey = "activity-zone";
+              else if (obj === "dust-zone" || obj === "zone-dust") matchedKey = "dust-zone";
+              else if (obj === "restricted-area" || obj === "zone-demolition") matchedKey = "restricted-area";
+              else if (obj === "worker-point" || obj === "zone-worker") matchedKey = "worker-point";
+              else if (obj === "evidence-station" || obj === "zone-evidence") matchedKey = "evidence-station";
+              else if (obj === "terminal" || obj === "building-main") matchedKey = "terminal";
+
+              setSelectedObject(matchedKey);
+              if (matchedKey) setInspectorOpen(true);
+            }}
+          >
             {/* ---------------------------------------------------- stage status */}
             <Panel
               title="Stage status"
