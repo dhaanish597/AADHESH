@@ -8,7 +8,6 @@ import { OperationsWorkspace } from "@/components/OperationsWorkspace";
 export default function TestingClient() {
   const [data, setData] = useState<SupervisorPayload | null>(null);
   const [error, setError] = useState<ApiFailure | null>(null);
-  const [busy, setBusy] = useState(true);
   const loaded = useRef(false);
 
   useEffect(() => {
@@ -24,10 +23,6 @@ export default function TestingClient() {
       .catch((err) => {
         if (!alive) return;
         setError(failureOf(err));
-      })
-      .finally(() => {
-        if (!alive) return;
-        setBusy(false);
       });
     return () => {
       alive = false;
@@ -39,7 +34,12 @@ export default function TestingClient() {
       <OperationsWorkspace
         payload={data}
         error={error ?? null}
-        busy={busy}
+        selectedObject={null}
+        onSelectObject={() => {}}
+        onCloseInspector={() => {}}
+        activeWorkspaceView="site"
+        onNavigateView={() => {}}
+        onOpenWorkers={() => {}}
       />
     </div>
   );

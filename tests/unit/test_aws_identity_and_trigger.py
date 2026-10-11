@@ -22,7 +22,7 @@ from typing import Any
 
 import pytest
 
-from aadesh_aws.api_handler import _principal
+from aadesh_aws.api_handler import PrincipalClaimError, _principal
 from aadesh_aws.events import publish_stage_invocation
 from aadesh_core.domain import Principal
 from aadesh_core.errors import AuthorizationDenied
@@ -48,8 +48,7 @@ def _claims_event(**claims: Any) -> dict[str, Any]:
 def test_principal_id_comes_from_the_claim_not_the_cognito_sub():
     """`resource.worker == principal` is ENTITY equality, so the id must be the pool's."""
     principal = _principal(
-        _claims_event(**{"custom:role": "worker", "custom:principal_id": "worker-001"}),
-        default_role="worker",
+        _claims_event(**{"custom:role": "worker", "custom:principal_id": "worker-001"})
     )
 
     assert principal is not None
@@ -59,9 +58,7 @@ def test_principal_id_comes_from_the_claim_not_the_cognito_sub():
 
 def test_principal_id_falls_back_to_sub_when_the_pool_has_no_such_attribute():
     """A pool without the attribute still yields a usable principal, never None."""
-    principal = _principal(
-        _claims_event(**{"custom:role": "facilitator"}), default_role="facilitator"
-    )
+    principal = _principal(_claims_event(**{"custom:role": "facilitator"}))
 
     assert principal is not None
     assert principal.principal_id == "cognito-sub-uuid"
@@ -71,17 +68,30 @@ def test_principal_id_falls_back_to_sub_when_the_pool_has_no_such_attribute():
 def test_a_body_supplied_identity_is_ignored():
     """The request body cannot name a principal; only the verified claims can."""
     principal = _principal(
-        _claims_event(**{"custom:role": "worker", "custom:principal_id": "worker-001"}),
-        default_role="worker",
+        _claims_event(**{"custom:role": "worker", "custom:principal_id": "worker-001"})
     )
 
     assert principal is not None
     assert principal.principal_id != "worker-009"
 
 
-def test_no_authorizer_claim_means_no_principal():
-    """The two routes that are not behind the authorizer get None, and the app falls back."""
-    assert _principal({"httpMethod": "GET", "path": "/api/health"}, default_role="worker") is None
+def test_no_authorizer_claims_are_rejected_on_protected_routes():
+    with pytest.raises(PrincipalClaimError):
+        _principal({"httpMethod": "GET", "path": "/api/roster/qr"})
+
+
+@pytest.mark.parametrize("role", [None, "", "administrator", "Supervisor", 3])
+def test_missing_malformed_and_unknown_roles_are_rejected(role):
+    claims = {"sub": "cognito-sub"}
+    if role is not None:
+        claims["custom:role"] = role
+    with pytest.raises(PrincipalClaimError):
+        _principal({"requestContext": {"authorizer": {"claims": claims}}})
+
+
+def test_supervisor_requires_administrator_assigned_site():
+    with pytest.raises(PrincipalClaimError):
+        _principal(_claims_event(**{"custom:role": "supervisor"}))
 
 
 def test_role_and_site_come_from_the_verified_claims():
@@ -92,8 +102,7 @@ def test_role_and_site_come_from_the_verified_claims():
                 "custom:assigned_site": SITE,
                 "custom:principal_id": SUPERVISOR_ID,
             }
-        ),
-        default_role="supervisor",
+        )
     )
 
     assert principal is not None
@@ -163,7 +172,7 @@ def test_the_published_event_carries_the_key_the_api_opened_parchis_under():
     result = publish_stage_invocation(
         order_id="so-1",
         site_id=SITE,
-        scenario="replay",
+        scenario="current",
         execution_id="exec-so-1",
         stage=3,
         order_doc_id="caqm-grap-stage3-order-2026-01-16",
@@ -178,7 +187,7 @@ def test_the_published_event_carries_the_key_the_api_opened_parchis_under():
     detail = json.loads(entry["Detail"])
     assert detail["execution_id"] == "exec-so-1"
     assert detail["order_id"] == "so-1"
-    assert detail["scenario"] == "replay"
+    assert detail["scenario"] == "current"
 
 
 def test_a_rejected_event_is_reported_and_never_raised():
@@ -186,7 +195,7 @@ def test_a_rejected_event_is_reported_and_never_raised():
     result = publish_stage_invocation(
         order_id="so-1",
         site_id=SITE,
-        scenario="replay",
+        scenario="current",
         execution_id="exec-so-1",
         client=_FakeEvents(failed=True),
     )
@@ -199,10 +208,24 @@ def test_an_unreachable_event_bus_is_reported_and_never_raised():
     result = publish_stage_invocation(
         order_id="so-1",
         site_id=SITE,
-        scenario="replay",
+        scenario="current",
         execution_id="exec-so-1",
         client=_FakeEvents(raises=True),
     )
 
     assert result["published"] is False
     assert "RuntimeError" in result["reason"]
+
+
+def test_historical_replay_cannot_publish_an_operational_event():
+    client = _FakeEvents()
+    result = publish_stage_invocation(
+        order_id="so-replay",
+        site_id=SITE,
+        scenario="replay",
+        execution_id="exec-replay",
+        client=client,
+    )
+    assert result["published"] is False
+    assert result["code"] == "OPERATIONAL_WRITE_DENIED"
+    assert client.entries == []

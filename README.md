@@ -1,5 +1,9 @@
 # Aadesh (आदेश)
 
+Live URL: [https://main.d1vf2zepthltbu.amplifyapp.com](https://main.d1vf2zepthltbu.amplifyapp.com)
+Demo URL: [https://main.d1vf2zepthltbu.amplifyapp.com/?demo=1](https://main.d1vf2zepthltbu.amplifyapp.com/?demo=1)
+Demo video: pending publication; YouTube link not available yet.
+
 **An environmental compliance execution system for Delhi-NCR construction sites under GRAP
 pollution-control restrictions.**
 
@@ -9,6 +13,44 @@ pollution-control restrictions.**
 
 Three nouns carry the whole product. **Aadesh** is the system. A **Standing Order** is the rule
 a supervisor pre-commits to. A **Parchi** (पर्ची) is the slip each worker ends up holding.
+
+## Interface
+
+The supervisor console uses the **Field Instrument** direction: cool concrete, reserved state
+signals, and IBM Plex Sans / IBM Plex Sans Devanagari / IBM Plex Mono. The Devanagari face is
+metrically matched to Plex Sans so the bilingual parchi feels like part of the same system.
+
+The home screen routes a judge directly into the seeded workflow without asking for an account.
+
+![Home · the first screen explains the worker record and offers direct demo entry points](docs/images/home-desktop.webp)
+![Home on a phone · the same console and parchi entry points fit a narrow screen](docs/images/home-mobile.webp)
+
+The supervisor view makes the revoked Stage III replay and its evidence status visible before the
+site obligations.
+
+![Supervisor console · a cited historical Stage III replay and obligations for the seeded site](docs/images/supervisor-desktop.webp)
+![Supervisor console on a phone · the replay state remains readable at 390 pixels](docs/images/supervisor-mobile.webp)
+![Supervisor obligations · the cited clause, replay-only scope, and source link](docs/images/supervisor-obligations-desktop.webp)
+
+The worker view is a Hindi first paper slip with a local demo acknowledgement state.
+
+![Worker parchi · a Hindi paper record with its serial, clause source, and own acknowledgement](docs/images/worker-desktop.webp)
+![Worker parchi on a phone · the status and 56 pixel acknowledgement control fit one hand](docs/images/worker-mobile.webp)
+
+The Cedar screen makes the no proxy acknowledgement rule a visible denial.
+
+![Cedar denial · the policy id and legitimate worker next step are visible](docs/images/cedar-desktop.webp)
+![Cedar denial on a phone · the denial remains legible in the narrow view](docs/images/cedar-mobile.webp)
+
+The verification screen shows the successful corpus check and the expected tamper failure.
+
+![Verification · 55 citations pass and the isolated byte change is detected](docs/images/verify-desktop.webp)
+![Verification on a phone · both verifier outcomes remain readable in a narrow view](docs/images/verify-mobile.webp)
+
+The evidence ledger lists the source hashes, retrieval times, page counts, and terminal summary.
+
+![Evidence ledger · CAQM sources, hashes and local verification output](docs/images/evidence-desktop.webp)
+![Evidence ledger on a phone · source register and verifier summary reflow to one column](docs/images/evidence-mobile.webp)
 
 ---
 
@@ -49,6 +91,20 @@ through explicit historical scenario replay. AQI observations cannot activate a 
 See the [engine API, rule audit and limitations](docs/obligation-engine.md), and the
 [initial source audit](docs/corpus-audit.md).
 
+## Status
+
+- **Works end to end locally:** hashed corpus verification, deterministic construction obligation
+  resolution, Cedar authorization boundaries, the simulated worker acknowledgement flow, and the
+  tamper check against an isolated copy.
+- **Seeded in demo mode:** the site roster, replay presentation, worker parchi, Cedar denial and
+  redacted facilitator view. Demo acknowledgement stays local to the browser; the seeded roster
+  is not live worker data.
+- **Not built:** welfare-board claim filing or payment, a current CAQM stage invocation, and a
+  production worker consent/session flow. The verified corpus has no entitlement clauses or
+  monetary amount.
+- The deployed demo stack uses `ExplainBackend=deterministic`; the path does not depend on a
+  Bedrock cold start.
+
 ## Quickstart
 
 ```bash
@@ -79,9 +135,9 @@ make web             # Next.js frontend (http://localhost:3000), in a second she
 
 ## Frontend
 
-The operational console lives in [`web/`](web/README.md): a Next.js + TypeScript + Tailwind
-app whose supervisor screen answers *"what is happening at my site and what do I need to
-do?"*. It holds no rules of its own — it calls the local JSON API (`make api`), which is the
+The operational console lives in [`web/`](web/README.md): a Next.js 16.4 + React 19 + TypeScript
+app with Tailwind CSS v4. Its supervisor screen answers *"what is happening at my site and what do I need to do?"*.
+It holds no rules of its own — it calls the local JSON API (`make api`), which is the
 same deterministic core the CLI and `make verify` use. It shows the historical Stage III
 replay labelled as a replay, the station reading labelled as a synthetic placeholder, and
 **no rupee amount**, because the verified corpus establishes none.
@@ -93,27 +149,21 @@ replay labelled as a replay, the station reading labelled as a synthetic placeho
 The resolver and corpus verification run locally today. The cloud and product integrations
 below describe the planned architecture.
 
-```
-real data → rules-as-data → deterministic resolver → authorization
-          → action → human acknowledgement → provenance/verification
-```
-
-```
-EventBridge (every 15 min)
-  └─▶ Lambda: ingest
-        ├─ OpenAQ / CPCB nearest-station reading ──▶ DynamoDB (reading + station + ts + staleness)
-        └─ S3: hashed CAQM order objects ──▶ OpenSearch (indexed pages, searchable quotes)
-
-Lambda: resolve
-  └─ site profile × invoked stage × rules-as-data corpus
-        └─▶ obligation set [{status, clause_id, page, quote}]   ◀── pure Python, no model
-
-Step Functions: standing order
-  stage trip ─▶ resolve ─▶ Cedar authorize ─▶ open parchi per worker ─▶ PENDING_ACK
-             ─▶ QR scanned, worker acknowledges ─▶ parchi sealed ─▶ CloudWatch audit
-
-Bedrock + Strands Agents  ◀── explanation only, contract-checked, deterministic fallback
-Cognito ─▶ Next.js on Amplify Hosting   |   Cedar ─▶ every read and write
+```mermaid
+flowchart LR
+  CAQM[CAQM source] -->|hashed source bytes| S3[S3 corpus store]
+  S3 -->|manifest and page index| VERIFY[Verifier]
+  VERIFY -->|verified clauses| RESOLVE[Resolver Lambda]
+  SITE[Site profile + invoked stage] --> RESOLVE
+  RESOLVE -->|applicable obligations| CEDAR[Cedar authorization]
+  CEDAR -->|authorized action| SO[Standing Order · Step Functions]
+  SO -->|issue one per worker| PARCHI[Parchi · DynamoDB]
+  PARCHI -->|worker scans QR| ACK[Worker acknowledgement · API Gateway]
+  ACK -->|content hash| SEALED[Sealed record · DynamoDB]
+  EVENT[EventBridge stage event] --> SO
+  SEALED --> AUDIT[Audit · CloudWatch]
+  READING[Station observation] -->|timestamped reading| DDB[DynamoDB readings]
+  DDB --> RESOLVE
 ```
 
 `aadesh_core` is pure Python with **zero AWS imports and zero network access**. Every side

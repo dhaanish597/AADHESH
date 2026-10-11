@@ -15,7 +15,7 @@ export PYTHONPATH := services
 
 .DEFAULT_GOAL := help
 .PHONY: help setup test test-all test-integration verify verify-tamper verify-index \
-        corpus corpus-help resolve lint fmt dev api web clean check
+        corpus corpus-help resolve lint fmt dev api web deploy-web clean check
 
 help: ## Show available targets
 	@grep -hE '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) \
@@ -44,7 +44,7 @@ verify: ## Re-prove every citation against hashed source bytes. Zero infra.
 	$(PY) -m aadesh_cli.verify
 
 verify-tamper: ## Flip one byte in a scratch copy and prove the check CATCHES it.
-	$(PY) -m aadesh_cli.verify --tamper
+	@$(PY) -m aadesh_cli.verify --tamper; code=$$?; if [ $$code -eq 1 ]; then echo 'Tamper check passed: expected failure detected.'; else echo "Tamper check failed unexpectedly (exit $$code)."; exit 1; fi
 
 verify-index: ## Additionally assert the OpenSearch index agrees (requires Docker)
 	$(PY) -m aadesh_cli.verify --with-index
@@ -96,6 +96,9 @@ api: ## Run the local JSON API over the deterministic core (port 8787)
 
 web: ## Run the Next.js frontend (port 3000); needs `make api` in another shell
 	cd web && npm install && npm run dev
+
+deploy-web: ## Build and manually publish the static frontend to Amplify (set STACK=aadesh-prod)
+	./infra/aws/deploy-web.sh
 
 dev: ## How to run both processes
 	@echo "Run these in two shells:"

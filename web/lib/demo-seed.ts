@@ -26,38 +26,38 @@ export const DEMO_SITE = {
 /** The officially invoked stage for the seeded scenario. */
 export const DEMO_OFFICIAL_STAGE = {
   stage: 3,
-  invoked_at: "2026-10-09T06:45:00+05:30",
-  lifecycle: "active" as const,
-  order_doc_id: "CAQM-GRAP-Order-16Oct2026-5838a44f",
-  order_date: "2026-10-09",
-  order_short_hash: "5838a44f",
+  invoked_at: "2026-01-16T00:00:00+05:30",
+  lifecycle: "revoked" as const,
+  revoked_at: "2026-01-22T00:00:00+05:30",
+  order_doc_id: "caqm-grap-stage3-order-2026-01-16",
+  order_date: "2026-01-16",
+  order_short_hash: "35813475",
   citation: {
-    source_doc: "CAQM Order dated 220120265838a44f",
-    source_page: 3,
-    source_quote:
-      "Construction work including excavation, piling and civil construction activities in identified areas shall be stopped during the period of invocation of Stage III.",
-    source_hash: "a3f91c2e7b9d4f1e8c6a2b5d3f9e1c7a4b8d2f6e5c1a9b3d7f4e2c8a6b0d4f1e",
+    source_doc: "caqm-grap-stage3-order-2026-01-16",
+    source_page: 1,
+    source_quote: "the Sub Committee on GRAP hereby decide to invoke all actions under Stage-III ('Severe' Air Quality of Delhi, ranging 4O1-45Of of extant schedule of GRAP, with immediate effect in right earnest by all the agencies concerned in Delhi-NCR,",
+    source_hash: "358134752e712d7aa807bda8d5e4987d8c39ae747dc3c08db93c59d4ff8d0839",
   },
 } as const;
 
-/** The nearest station reading for the seeded scenario. */
+/** Illustrative synthetic reading. It is not the trigger for this replay. */
 export const DEMO_READING = {
   station_id: "Rohini",
   parameter: "aqi",
   value: 412,
-  observed_at: "2026-10-09T09:00:00+05:30",
-  ingested_at: "2026-10-09T09:05:00+05:30",
-  provenance: "measured" as const,
-  freshness: "FRESH" as const,
-  age_minutes: 18,
+  observed_at: "2026-01-16T09:00:00+05:30",
+  ingested_at: "2026-01-16T09:05:00+05:30",
+  provenance: "synthetic" as const,
+  freshness: "STALE" as const,
+  age_minutes: 382000,
 } as const;
 
-/** The AQI-implied stage, so the discrepancy line has something to say. */
-export const DEMO_IMPLIED_STAGE = 3 as const;
+/** The replay fixture has no sourced, time-matched AQI reading. */
+export const DEMO_IMPLIED_STAGE = null;
 
 /** A single obligation the seeded scenario surfaces for this site. */
 export const DEMO_OBLIGATION = {
-  obligation_id: "GRAP-III-3.2-dust",
+  obligation_id: "grap3-cd-restricted-activities",
   label: "Stop dust-generating construction activity",
   mode: "regulatory",
   applicable: true,
@@ -65,44 +65,24 @@ export const DEMO_OBLIGATION = {
   required_action:
     "Cease piling, excavation and any activity that raises dust in the identified area until the invocation lapses.",
   reason:
-    "Stage III is invoked for the site's area. The activity list in the order names piling explicitly, and the site is piling works in progress.",
-  source_doc: "CAQM Order dated 220120265838a44f",
-  source_page: 3,
+    "In this historical replay, the cited Stage III schedule lists piling among restricted activities. The invocation shown here was revoked.",
+  source_doc: "caqm-grap-schedule-2026-09-29",
+  source_page: 11,
   source_quote:
-    "Construction work including excavation, piling and civil construction activities in identified areas shall be stopped during the period of invocation of Stage III.",
+    "Enforce strict restrictions on the following categories of dust generating/ air pollution causing construction and demolition ( C&D) activities in the entire NCR",
   source_hash:
-    "a3f91c2e7b9d4f1e8c6a2b5d3f9e1c7a4b8d2f6e5c1a9b3d7f4e2c8a6b0d4f1e",
+    "473e245b758c68be776b1d732be288abdbb5bd9084abf8fcdde9bcd3afcfa413",
   evidence: [
     {
-      source_doc: "CAQM Order dated 220120265838a44f",
-      source_page: 3,
+      source_doc: "caqm-grap-schedule-2026-09-29",
+      source_page: 11,
       source_quote:
-        "Construction work including excavation, piling and civil construction activities in identified areas shall be stopped during the period of invocation of Stage III.",
+        "Enforce strict restrictions on the following categories of dust generating/ air pollution causing construction and demolition ( C&D) activities in the entire NCR",
       source_hash:
-        "a3f91c2e7b9d4f1e8c6a2b5d3f9e1c7a4b8d2f6e5c1a9b3d7f4e2c8a6b0d4f1e",
+        "473e245b758c68be776b1d732be288abdbb5bd9084abf8fcdde9bcd3afcfa413",
     },
   ],
   issues_parchi: true,
-} as const;
-
-/** A second, out-of-scope obligation, so the console can show "not applicable" honestly. */
-export const DEMO_OBLIGATION_OUT_OF_SCOPE = {
-  obligation_id: "GRAP-III-5.1-burn",
-  label: "Stop open burning of garbage and biomass",
-  mode: "regulatory",
-  applicable: false,
-  status: "NOT_APPLICABLE" as const,
-  required_action:
-    "Not required at this site. Open burning is not part of the site's activity profile.",
-  reason:
-    "The site's activity is piling works. The obligation applies to sites that burn waste; this site does not.",
-  source_doc: "CAQM Order dated 220120265838a44f",
-  source_page: 5,
-  source_quote:
-    "Burning of garbage and biomass in identified areas shall be stopped during the period of invocation.",
-  source_hash: "b7c1d2e3f4a59687b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1",
-  evidence: [],
-  issues_parchi: false,
 } as const;
 
 /** The Standing Order the supervisor can arm in the seeded scenario. */
@@ -174,26 +154,21 @@ export const DEMO_SUPERVISOR_PAYLOAD = {
   site_id: DEMO_SITE.site_id,
   entity_type: "construction_site",
   mode: "REPLAY" as const,
-  resolved_at: "2026-10-09T09:12:00+05:30",
+  resolved_at: "2026-01-16T09:12:00+05:30",
   official_stage: DEMO_OFFICIAL_STAGE.stage,
-  current_official_stage: DEMO_OFFICIAL_STAGE.stage,
+  current_official_stage: "NONE" as const,
   implied_stage: DEMO_IMPLIED_STAGE,
-  stage_status: "DISCREPANCY" as const,
+  stage_status: "OFFICIAL_ONLY" as const,
   stage_reason:
-    "The AQI at Rohini (412) and the official invocation both point to Stage III, but the official invocation is the legal trigger — obligations are evaluated against the order, not the reading. This is the aligned case shown with a discrepancy note so the provenance line is honest about what each signal says.",
+    "No time-matched station reading is included in this historical replay. The official invocation is the legal trigger; the illustrative AQI reading is synthetic.",
   official_invocation: DEMO_OFFICIAL_STAGE,
-  implied_stage_citation: {
-    source_doc: "Rohini station AQI — 412 at 09:00 IST",
-    source_page: 1,
-    source_quote: "Rohini station reported AQI 412 at 09:00 IST, which crosses the Stage III AQI threshold.",
-    source_hash: "c1d2e3f4a59687b8c9d0e1f2a3b4c5d6e7f8a9b0",
-  },
+  implied_stage_citation: null,
   replay_notice:
-    "REPLAY — recorded readings. This is a historical scenario, not a live station feed.",
+    "REPLAY — recorded invocation, not a live restriction. The current schedule citation demonstrates the workflow; it does not prove which clauses applied on 16 January 2026.",
   reading: DEMO_READING,
-  summary: { applicable: 1, out_of_scope: 1, parchi_issuing: 1 },
+  summary: { applicable: 1, out_of_scope: 0, parchi_issuing: 1 },
   fully_sourced: true,
-  obligations: [DEMO_OBLIGATION, DEMO_OBLIGATION_OUT_OF_SCOPE],
+  obligations: [DEMO_OBLIGATION],
   excluded_obligations: [],
   site: {
     site_id: DEMO_SITE.site_id,
@@ -204,12 +179,12 @@ export const DEMO_SUPERVISOR_PAYLOAD = {
   stage_detail: {
     official_stage: DEMO_OFFICIAL_STAGE.stage,
     is_replay: true,
-    lifecycle: "active",
+    lifecycle: "revoked",
     order_doc_id: DEMO_OFFICIAL_STAGE.order_doc_id,
     order_date: DEMO_OFFICIAL_STAGE.order_date,
     order_short_hash: DEMO_OFFICIAL_STAGE.order_short_hash,
-    revoked_at: null,
-    discrepancy: true,
+    revoked_at: "2026-01-22T00:00:00+05:30",
+    discrepancy: false,
   },
   standing_order: null as null,
   impact: {
@@ -217,7 +192,7 @@ export const DEMO_SUPERVISOR_PAYLOAD = {
     documented: 34,
     acknowledged: 30,
     sealed: 0,
-    readiness_ready: 30,
+    readiness_ready: 33,
     readiness_total: 34,
     standings: DEMO_WORKERS.map((w) => ({
       worker_id: w.worker_id,
@@ -238,15 +213,31 @@ export const DEMO_PARCHI_VIEW = {
   worker_id: "worker-007",
   state: "pending_ack",
   stage: 3,
-  provenance: "measured",
-  cites_measured_data: true,
-  obligation_ids: ["GRAP-III-3.2-dust"],
+  provenance: "replay",
+  cites_measured_data: false,
+  obligation_ids: ["grap3-cd-restricted-activities"],
   readiness_checklist: [
     "Registration number on the site register",
     "Bank account details on file with the contractor",
     "This parchi acknowledged in your own name",
   ],
   expires_at: "2026-10-10T06:45:00+05:30",
+} as const;
+
+/** Recorded output of the local corpus verification commands, shown read-only in demo mode. */
+export const DEMO_VERIFY_PAYLOAD = {
+  verify: {
+    command: "make verify",
+    exit_code: 0,
+    passed: true,
+    output: "AADESH CITATION VERIFICATION\nsource documents · manifest entries: 3 · bytes verified (sha-256): 3\ncitations · entries checked: 55 · verified verbatim: 55 · failed: 0\nVERIFIED — 3 source objects and 55 citations re-proved against indexed source bytes.",
+  },
+  tamper: {
+    command: "make verify-tamper",
+    exit_code: 1,
+    caught: true,
+    output: "AADESH TAMPER CHECK\nScratch copy only; the real corpus is untouched.\n\nFAIL caqm-grap-schedule-2026-09-29: hash mismatch.\nCitations using the changed source bytes are rejected.\n\nFAILED (expected) — the tampered byte was detected. The citation gate works.",
+  },
 } as const;
 
 /**
@@ -256,9 +247,9 @@ export const DEMO_PARCHI_VIEW = {
  * not a Hindi speaker and would rather flag than guess.
  */
 export const PARCHI_HI = {
-  title: "आज काम बंद है।",
+  title: "यह 16 जनवरी की ऐतिहासिक पर्ची है।",
   // REVIEW-HI: is "आपके नाम पर" the right way to say "recorded in your own name"?
-  sub: "यह आपकी पर्ची है। इसे स्वीकार करें ताकि रोक आपके नाम पर दर्ज हो।",
+  sub: "यह आपकी पर्ची है। इसे स्वीकार करें ताकि पुराना रिकॉर्ड आपके नाम से दर्ज हो।",
   date: "दिनांक",
   site: "स्थल",
   reason: "कारण",
@@ -271,12 +262,12 @@ export const PARCHI_HI = {
   sealed: "सीलबंद",
   // REVIEW-HI: does "आज GRAP के तहत काम बंद है" read as natural, or stiff?
   reasonBody: (stage: string) =>
-    `आज GRAP ${stage} के तहत काम बंद है।`,
+    `यह Stage ${stage} की पुरानी पर्ची है; आज की रोक नहीं।`,
 } as const;
 
 export const PARCHI_EN = {
-  title: "Work stopped today.",
-  sub: "This is your parchi. Confirm it so the halt is recorded in your own name.",
+  title: "Historical record · not in force.",
+  sub: "This historical record is for your review. Demo acknowledgement stays on this device.",
   date: "Date",
   site: "Site",
   reason: "Reason",
@@ -288,5 +279,5 @@ export const PARCHI_EN = {
   pending: "Awaiting your confirmation",
   sealed: "Sealed",
   reasonBody: (stage: string) =>
-    `Work stopped today under GRAP ${stage}.`,
+    `Historical GRAP ${stage} record. This is not a restriction in force today.`,
 } as const;

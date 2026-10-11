@@ -46,6 +46,7 @@ Globals:
         AADESH_TABLE_TRIGGER_RUNS: !Ref TriggerRunsTable
         AADESH_TABLE_READINGS: !Ref ReadingsTable
         AADESH_TABLE_SITES: !Ref SitesTable
+        AADESH_TABLE_CONSENTS: !Ref ConsentsTable
     Tags:
       Application: aadesh
 
@@ -251,6 +252,33 @@ Resources:
       Tags:
         - { Key: Purpose, Value: "The facts obligations are resolved against - data and not code" }
 
+  ConsentsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub "${AWS::StackName}-consents"
+      BillingMode: PAY_PER_REQUEST
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+      SSESpecification:
+        SSEEnabled: true
+      AttributeDefinitions:
+        - { AttributeName: scope_key, AttributeType: S }
+        - { AttributeName: context_id, AttributeType: S }
+      KeySchema:
+        - { AttributeName: scope_key, KeyType: HASH }
+      GlobalSecondaryIndexes:
+        - IndexName: context_id-index
+          KeySchema: [{ AttributeName: context_id, KeyType: HASH }]
+          Projection: { ProjectionType: ALL }
+      TimeToLiveSpecification:
+        AttributeName: ttl
+        Enabled: true
+      Tags:
+        # Consent must outlive the request that created it and must never be deleted the
+        # moment it expires: the worker must still be able to withdraw it after the fact.
+        - Key: Purpose
+          Value: "Durable worker consent - one record per worker/facilitator/parchi scope"
+
   # ==========================================================================
   # S3 -- the authoritative CAQM bytes
   # ==========================================================================
@@ -299,12 +327,17 @@ Resources:
     Type: AWS::Cognito::UserPool
     Properties:
       UserPoolName: !Sub "${AWS::StackName}-users"
+      # Accounts and authorization attributes are provisioned by an IAM-authorized operator.
+      # Missing/unknown roles are rejected in the API; public self-registration is disabled.
+      AdminCreateUserConfig:
+        AllowAdminCreateUserOnly: true
       UsernameAttributes: [email]
       AutoVerifiedAttributes: [email]
       MfaConfiguration: "OFF"
       Schema:
-        # The three attributes the authorization boundary reads. `role` and `assigned_site`
-        # are what the Cedar policy compares (`principal.role == "supervisor"`,
+        # The three attributes the authorization boundary reads. They are set by the
+        # administrator provisioning process only; the app client below may write email only.
+        # `role` and `assigned_site` are what the Cedar policy compares (`principal.role == "supervisor"`,
         # `resource.siteId == principal.assignedSite`); `principal_id` is the stable identity
         # a parchi names, so `resource.worker == principal` (ENTITY equality) can be satisfied
         # by a `worker-001` and never by a Cognito `sub` UUID.
@@ -635,6 +668,17 @@ Resources:
                   # an ARN with the account in that slot does not match anything.
                   - !Sub "arn:aws:bedrock:${BedrockRegion}::foundation-model/${BedrockModelId}"
               - !Ref AWS::NoValue
+        - Statement:
+            # Consent storage is the one place a request can change durable authorization
+            # state, so it is granted on its own table rather than folded into the generic
+            # state statement. GetItem/PutItem/Query are all the API performs; the
+            # conditional write rides on PutItem and needs no extra action.
+            - Sid: ConsentState
+              Effect: Allow
+              Action: [dynamodb:GetItem, dynamodb:PutItem, dynamodb:Query]
+              Resource:
+                - !GetAtt ConsentsTable.Arn
+                - !Sub "${ConsentsTable.Arn}/index/*"
       Events:
         # Authenticated routes: everything under /api except the five listed below.
         #
@@ -1065,6 +1109,9 @@ Outputs:
 
   ParchisTableName:
     Value: !Ref ParchisTable
+
+  ConsentsTableName:
+    Value: !Ref ConsentsTable
 
   StandingOrderStateMachineArn:
     Value: !Ref StandingOrderStateMachine

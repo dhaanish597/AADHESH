@@ -1,0 +1,17 @@
+{
+  "pages": {},
+  "app": {
+    "[project]/web/app/test-workspace/page": [
+      "static/media/03fc1b4a8d284b5e.p.0wiir8udbzjvx.woff2",
+      "static/media/68cf7a9643a0147c.p.3ye-whi9fpsfo.woff2",
+      "static/media/ea1ed15c3c442612.p.39y3v72u48386.woff2",
+      "static/media/7a8be8f0920324f3.p.1t0fmgbdfotba.woff2",
+      "static/media/ca842eb165cb445f.p.0ajww19fqy_8f.woff2",
+      "static/media/99e609270109b47d.p.40sczeszzbjw1.woff2",
+      "static/media/effe91970fc4db64.p.0oace-s_gkfks.woff2",
+      "static/media/23b7a97ae3b5c134.p.226pwps5o-gq_.woff2"
+    ]
+  },
+  "appUsingSizeAdjust": true,
+  "pagesUsingSizeAdjust": false
+}

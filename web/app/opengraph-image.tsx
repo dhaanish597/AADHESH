@@ -1,0 +1,21 @@
+export const size = { width: 1200, height: 630 };
+export const contentType = "image/svg+xml";
+export const dynamic = "force-static";
+
+export default function OpenGraphImage() {
+  const liveUrl = process.env.NEXT_PUBLIC_LIVE_URL ?? "https://main.d1vf2zepthltbu.amplifyapp.com";
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
+  <rect width="1200" height="630" fill="#13161a"/>
+  <rect x="72" y="68" width="44" height="44" fill="none" stroke="#ffb000" stroke-width="3"/>
+  <path d="M84 82h20M84 90h20M84 98h20" stroke="#eef1f4" stroke-width="3"/>
+  <text x="138" y="98" fill="#ffb000" font-family="IBM Plex Sans,Arial,sans-serif" font-size="26" font-weight="700" letter-spacing="5">AADHESH</text>
+  <text x="330" y="98" fill="#8b949e" font-family="IBM Plex Mono,monospace" font-size="15" letter-spacing="3">FIELD INSTRUMENT</text>
+  <text x="72" y="270" fill="#eef1f4" font-family="IBM Plex Sans,Arial,sans-serif" font-size="64" font-weight="700">When work stops,</text>
+  <text x="72" y="350" fill="#ffb000" font-family="IBM Plex Sans,Arial,sans-serif" font-size="64" font-weight="700">every worker gets a record.</text>
+  <text x="72" y="420" fill="#c2c9d2" font-family="IBM Plex Sans,Arial,sans-serif" font-size="26">Cited restrictions. Site actions. A worker’s own acknowledgement.</text>
+  <path d="M72 518H1128" stroke="#3f4651"/>
+  <text x="72" y="568" fill="#aab4bf" font-family="IBM Plex Mono,monospace" font-size="18" letter-spacing="2">DEMO · HISTORICAL INVOCATION REPLAY</text>
+  <text x="1128" y="568" text-anchor="end" fill="#aab4bf" font-family="IBM Plex Mono,monospace" font-size="18">${liveUrl}</text>
+  </svg>`;
+  return new Response(svg, { headers: { "Content-Type": contentType } });
+}

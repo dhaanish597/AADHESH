@@ -1,0 +1,3 @@
+module.exports=[83504,a=>{"use strict";var b=a.i(93385),c=a.i(4710);a.s(["default",0,function(){return(0,b.useEffect)(()=>{let a=new URLSearchParams(window.location.search);if(!c.R)return void window.location.replace("1"===a.get("demo")?"/supervisor?demo=1":"/supervisor");let b=(0,c.h)()?.role;window.location.replace("worker"===b?"/worker":"facilitator"===b?"/facilitator":"supervisor"===b?"/supervisor":b?"/login?error=workspace_unavailable":"/login")},[]),null}])}];
+
+//# sourceMappingURL=web_app_site_page_tsx_04vg4ctk1cpts._.js.map

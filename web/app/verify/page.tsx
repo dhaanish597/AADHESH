@@ -4,13 +4,22 @@ import { useCallback, useEffect, useState } from "react";
 import { ApiErrorNote, Button, IconTerminal, Loading, Panel, Pill } from "@/components/ui";
 import { getJson, failureOf, type ApiFailure } from "@/lib/api";
 import type { VerifyPayload } from "@/lib/types";
+import { DEMO_VERIFY_PAYLOAD } from "@/lib/demo-seed";
 
 export default function VerifyPage() {
+  const [demoMode, setDemoMode] = useState(process.env.NEXT_PUBLIC_AADESH_DEMO === "1");
+  const [modeReady, setModeReady] = useState(false);
   const [data, setData] = useState<VerifyPayload | null>(null);
   const [error, setError] = useState<ApiFailure | null>(null);
   const [busy, setBusy] = useState(false);
 
   const run = useCallback(async () => {
+    if (!modeReady) return;
+    if (demoMode) {
+      setData(DEMO_VERIFY_PAYLOAD as unknown as VerifyPayload);
+      setError(null);
+      return;
+    }
     setBusy(true);
     setError(null);
     try {
@@ -20,6 +29,14 @@ export default function VerifyPage() {
     } finally {
       setBusy(false);
     }
+  }, [demoMode, modeReady]);
+
+  useEffect(() => {
+    const demo = process.env.NEXT_PUBLIC_AADESH_DEMO === "1" ||
+      new URLSearchParams(window.location.search).get("demo") === "1" ||
+      window.sessionStorage.getItem("aadesh_demo") === "1";
+    setDemoMode(demo);
+    setModeReady(true);
   }, []);
 
   useEffect(() => {
@@ -40,10 +57,10 @@ export default function VerifyPage() {
             a document said.
           </p>
         </div>
-        <Button onClick={run} disabled={busy} variant="secondary">
+        {!demoMode && <Button onClick={run} disabled={busy} variant="secondary">
           <IconTerminal className="h-4 w-4" />
           {busy ? "Running…" : "Run verification"}
-        </Button>
+        </Button>}
       </header>
 
       {error && (
@@ -55,6 +72,7 @@ export default function VerifyPage() {
 
       {data && (
         <div className="mt-6 space-y-6">
+          {demoMode && <p className="border border-accent/40 bg-accent/10 p-3 text-sm text-accent">Recorded local output. Demo mode does not run verification in your browser; both commands were run against the repository corpus.</p>}
           <ResultPanel
             command={data.verify.command}
             output={data.verify.output}

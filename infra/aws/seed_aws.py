@@ -19,8 +19,15 @@ Nothing here is a secret and nothing here invents a measurement:
 
 Usage (boto3 is the opt-in `aws` extra, so run it with one that has it):
 
-    uv run --with boto3 python infra/aws/seed_aws.py all --stack-name aadesh-prod
-    uv run --with boto3 python infra/aws/seed_aws.py check --stack-name aadesh-prod
+    uv run --with boto3 python infra/aws/seed_aws.py all --stack-name aadesh-dev
+    uv run --with boto3 python infra/aws/seed_aws.py users \\
+        --allow-demo-users --stack-name aadesh-dev
+    uv run --with boto3 python infra/aws/seed_aws.py check --stack-name aadesh-dev
+
+`users` creates synthetic demonstration accounts with operational roles. It is refused unless
+`--allow-demo-users` is explicit and must only be used in an isolated development/test pool.
+Provision production identities through the separately controlled administrator process in
+`infra/aws/ROLE_PROVISIONING.md`.
 """
 
 from __future__ import annotations
@@ -89,9 +96,8 @@ def _wire_table_names(stack_name: str) -> None:
 
 
 def seed_site(*, site_id: str | None, fixture: Path) -> dict:
-    from aadesh_core.domain.construction import ConstructionSite
-
     from aadesh_adapters.store.dynamo import DynamoSitesStore
+    from aadesh_core.domain.construction import ConstructionSite
 
     payload = json.loads(fixture.read_text(encoding="utf-8"))
     if site_id:
@@ -243,7 +249,7 @@ def check(*, site_id: str, station_id: str) -> dict:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("action", choices=["site", "reading", "users", "all", "check"])
-    parser.add_argument("--stack-name", default="aadesh-prod")
+    parser.add_argument("--stack-name", default="aadesh-dev")
     parser.add_argument("--site-id", default="example-piling-site")
     parser.add_argument("--site-fixture", type=Path, default=DEFAULT_SITE_FIXTURE)
     parser.add_argument("--station-id", default=DEFAULT_STATION_ID)
@@ -254,7 +260,18 @@ def main(argv: list[str] | None = None) -> int:
         help="required for the users action",
     )
     parser.add_argument("--credentials-out", type=Path, default=None)
+    parser.add_argument(
+        "--allow-demo-users",
+        action="store_true",
+        help="allow synthetic demo identities; only for an isolated development/test pool",
+    )
     args = parser.parse_args(argv)
+
+    if args.action in ("users", "all") and not args.allow_demo_users:
+        parser.error(
+            "users/all would provision synthetic role-bearing demo accounts; pass "
+            "--allow-demo-users only for an isolated development/test pool"
+        )
 
     _wire_table_names(args.stack_name)
     sys.path.insert(0, str(REPO_ROOT / "services"))

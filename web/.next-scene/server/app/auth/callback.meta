@@ -1,0 +1,39 @@
+{
+  "headers": {
+    "x-nextjs-stale-time": "300",
+    "x-nextjs-prerender": "1",
+    "x-next-cache-tags": "_N_T_/layout,_N_T_/auth/layout,_N_T_/auth/callback/layout,_N_T_/auth/callback/page,_N_T_/auth/callback"
+  },
+  "segmentPaths": [
+    "/_tree",
+    "/_full",
+    "/auth/callback/__PAGE__"
+  ],
+  "prefetchHints": {
+    "hints": 64,
+    "slots": {
+      "children": {
+        "hints": 96,
+        "slots": {
+          "children": {
+            "hints": 96,
+            "slots": {
+              "children": {
+                "hints": 160,
+                "slots": null
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "routeCache": {
+    "key": "/route-cache/APP_PAGE/33c0930ab8da2d97b2c7b422644a8f7d56b2fc37ca9bc77933b0c8b6723dc225/$/auth/callback",
+    "owner": {
+      "kind": "APP_PAGE",
+      "sourceRoute": "/auth/callback/page"
+    },
+    "isFallback": false
+  }
+}

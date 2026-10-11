@@ -19,7 +19,10 @@ export default function LoginPage() {
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    setError(params.get("error_description") ?? params.get("error"));
+    const code = params.get("error");
+    setError(code === "workspace_unavailable"
+      ? "This account’s role does not have a workspace in AADHESH. Contact your administrator."
+      : params.get("error_description") ?? code);
   }, []);
 
   return (

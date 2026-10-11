@@ -24,6 +24,7 @@ from aadesh_adapters.authz.cedar_authz import CedarAuthorizationProvider
 from aadesh_adapters.corpus.s3 import S3Corpus
 from aadesh_adapters.store.dynamo import (
     DynamoAcknowledgementTokenStore,
+    DynamoConsentStore,
     DynamoIdempotencyLedger,
     DynamoParchiStore,
     DynamoQrLinkCache,
@@ -200,6 +201,11 @@ def build_application(config: Config | None = None) -> AadeshApplication:
         task_tokens=DynamoTaskTokenStore(),
         qr_cache=DynamoQrLinkCache(),
         readings_store=DynamoReadingsStore(),
+        # Consent MUST be durable: a grant and the assistance it authorizes are different
+        # invocations, so consent held in a process would be gone by the time it is checked.
+        # This is the only consent source on AWS -- there is no in-memory fallback to degrade
+        # to, and no cache that could keep a revoked consent looking live.
+        consent_store=DynamoConsentStore(),
         explanation_model_factory=_explanation_model_factory(config),
     )
     app.install_execution_resumer(_make_resumer())

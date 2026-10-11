@@ -1,0 +1,16 @@
+version: 1
+frontend:
+  phases:
+    preBuild:
+      commands:
+        - npm ci --prefix web
+    build:
+      commands:
+        - cd web && AADHESH_STATIC_EXPORT=1 NEXT_PUBLIC_AADESH_DEMO=0 NEXT_PUBLIC_API_BASE_URL=$API_URL npm run build && cd .. && sh infra/aws/normalize-static-export.sh
+  artifacts:
+    baseDirectory: web/out
+    files:
+      - '**/*'
+  cache:
+    paths:
+      - web/node_modules/**/*

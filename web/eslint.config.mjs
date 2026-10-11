@@ -5,7 +5,7 @@ import tseslint from "typescript-eslint";
 
 export default tseslint.config(
   {
-    ignores: [".next/**", ".next-review/**", "node_modules/**", "next-env.d.ts", "out/**"],
+    ignores: [".next/**", ".next-review/**", ".next-redesign-verify/**", ".next-scene/**", "node_modules/**", "next-env.d.ts", "out/**"],
   },
   js.configs.recommended,
   ...tseslint.configs.recommended,

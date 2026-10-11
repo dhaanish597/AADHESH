@@ -1,0 +1,21 @@
+{
+  "/_global-error/page": "app/_global-error/page.js",
+  "/_not-found/page": "app/_not-found/page.js",
+  "/auth/callback/page": "app/auth/callback/page.js",
+  "/cedar/page": "app/cedar/page.js",
+  "/evidence/page": "app/evidence/page.js",
+  "/facilitator/page": "app/facilitator/page.js",
+  "/icon.svg/route": "app/icon.svg/route.js",
+  "/impact/page": "app/impact/page.js",
+  "/login/page": "app/login/page.js",
+  "/manifest.webmanifest/route": "app/manifest.webmanifest/route.js",
+  "/opengraph-image/route": "app/opengraph-image/route.js",
+  "/page": "app/page.js",
+  "/parchi/page": "app/parchi/page.js",
+  "/site/page": "app/site/page.js",
+  "/styleguide/page": "app/styleguide/page.js",
+  "/supervisor/page": "app/supervisor/page.js",
+  "/test-workspace/page": "app/test-workspace/page.js",
+  "/verify/page": "app/verify/page.js",
+  "/worker/page": "app/worker/page.js"
+}

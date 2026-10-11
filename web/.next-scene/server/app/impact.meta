@@ -1,0 +1,34 @@
+{
+  "headers": {
+    "x-nextjs-stale-time": "300",
+    "x-nextjs-prerender": "1",
+    "x-next-cache-tags": "_N_T_/layout,_N_T_/impact/layout,_N_T_/impact/page,_N_T_/impact"
+  },
+  "segmentPaths": [
+    "/_tree",
+    "/_full",
+    "/impact/__PAGE__"
+  ],
+  "prefetchHints": {
+    "hints": 64,
+    "slots": {
+      "children": {
+        "hints": 96,
+        "slots": {
+          "children": {
+            "hints": 160,
+            "slots": null
+          }
+        }
+      }
+    }
+  },
+  "routeCache": {
+    "key": "/route-cache/APP_PAGE/c7fc12ff80c30d7d4fb18c0b91ce7b53c646692cd3b717faaa87efe07172c0f8/$/impact",
+    "owner": {
+      "kind": "APP_PAGE",
+      "sourceRoute": "/impact/page"
+    },
+    "isFallback": false
+  }
+}

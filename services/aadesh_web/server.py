@@ -65,7 +65,14 @@ REGISTERED_WORKERS = 27
 class Demo(AadeshApplication):
     """In-memory demonstration state over the real deterministic core."""
 
-    def __init__(self, corpus_root: Path = DEFAULT_CORPUS) -> None:
+    def __init__(
+        self,
+        corpus_root: Path = DEFAULT_CORPUS,
+        *,
+        allow_demo_replay_writes: bool = True,
+        store: Any = None,
+        consent_store: Any = None,
+    ) -> None:
         corpus_root = Path(corpus_root)
         site = ConstructionSite.from_dict(json.loads(SITE_FIXTURE.read_text(encoding="utf-8")))
         super().__init__(
@@ -78,7 +85,7 @@ class Demo(AadeshApplication):
                 ),
             ),
             registered={f"worker-{i:03d}" for i in range(1, REGISTERED_WORKERS + 1)},
-            store=InMemoryParchiStore(),
+            store=store if store is not None else InMemoryParchiStore(),
             tokens=InMemoryAcknowledgementTokenStore(),
             ledger=InMemoryIdempotencyLedger(),
             authz=CedarAuthorizationProvider(
@@ -96,6 +103,9 @@ class Demo(AadeshApplication):
             verify_runner=run_verify,
             order_store=InMemoryStandingOrderStore(),
             task_tokens=InMemoryTaskTokenStore(),
+            consent_store=consent_store,
+            allow_demo_replay_writes=allow_demo_replay_writes,
+            allow_demo_principal_fallback=True,
         )
 
 
@@ -221,6 +231,19 @@ class Handler(BaseHTTPRequestHandler):
                     worker_id=str(body.get("worker_id", "worker-001")),
                     parchi_id=str(body.get("parchi_id", "")),
                 ),
+            )
+        elif path == "/api/consent/grant":
+            self._send(
+                200,
+                demo.grant_consent(
+                    parchi_id=str(body.get("parchi_id", "")),
+                    worker_id=str(body.get("worker_id", "")),
+                ),
+            )
+        elif path == "/api/consent/revoke":
+            self._send(
+                200,
+                demo.revoke_consent(str(body.get("context_id", ""))),
             )
         elif path in ("/api/explain", "/api/explanation"):
             self._send(200, demo.explain(scenario=body.get("scenario", "replay")))

@@ -29,6 +29,7 @@ TABLES = MappingProxyType(
         "trigger_runs": "aadesh-trigger-runs",
         "readings": "aadesh-readings",
         "sites": "aadesh-sites",
+        "consents": "aadesh-consents",
     }
 )
 
@@ -41,6 +42,7 @@ TABLE_ENV = MappingProxyType(
         "trigger_runs": "AADESH_TABLE_TRIGGER_RUNS",
         "readings": "AADESH_TABLE_READINGS",
         "sites": "AADESH_TABLE_SITES",
+        "consents": "AADESH_TABLE_CONSENTS",
     }
 )
 

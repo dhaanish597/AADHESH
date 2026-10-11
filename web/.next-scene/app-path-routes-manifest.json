@@ -1,0 +1,21 @@
+{
+  "/_global-error/page": "/_global-error",
+  "/_not-found/page": "/_not-found",
+  "/auth/callback/page": "/auth/callback",
+  "/cedar/page": "/cedar",
+  "/evidence/page": "/evidence",
+  "/facilitator/page": "/facilitator",
+  "/icon.svg/route": "/icon.svg",
+  "/impact/page": "/impact",
+  "/login/page": "/login",
+  "/manifest.webmanifest/route": "/manifest.webmanifest",
+  "/opengraph-image/route": "/opengraph-image",
+  "/page": "/",
+  "/parchi/page": "/parchi",
+  "/site/page": "/site",
+  "/styleguide/page": "/styleguide",
+  "/supervisor/page": "/supervisor",
+  "/test-workspace/page": "/test-workspace",
+  "/verify/page": "/verify",
+  "/worker/page": "/worker"
+}

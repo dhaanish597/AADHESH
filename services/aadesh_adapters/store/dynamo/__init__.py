@@ -15,6 +15,7 @@ from aadesh_adapters.store.dynamo.client import (
     s3_client,
     table_name,
 )
+from aadesh_adapters.store.dynamo.consent import DynamoConsentStore
 from aadesh_adapters.store.dynamo.operational import (
     DynamoAcknowledgementTokenStore,
     DynamoIdempotencyLedger,
@@ -33,6 +34,7 @@ from aadesh_adapters.store.dynamo.standing_order import (
 __all__ = [
     "ConditionalCheckFailed",
     "DynamoAcknowledgementTokenStore",
+    "DynamoConsentStore",
     "DynamoIdempotencyLedger",
     "DynamoParchiStore",
     "DynamoQrLinkCache",

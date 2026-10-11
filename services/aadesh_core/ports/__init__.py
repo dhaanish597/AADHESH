@@ -16,6 +16,7 @@ from aadesh_core.ports.authz import (
     EntityRef,
 )
 from aadesh_core.ports.clock import Clock
+from aadesh_core.ports.consent import ConsentStore, StoredConsent
 from aadesh_core.ports.corpus import InvokedStageSource, RulesCorpus, SourceDocumentStore
 from aadesh_core.ports.explanation import ExplanationModel, ExplanationProvider
 from aadesh_core.ports.parchi_store import ParchiStore
@@ -30,6 +31,7 @@ __all__ = [
     "AuthzResource",
     "CitationVerifier",
     "Clock",
+    "ConsentStore",
     "EntityRef",
     "ExplanationModel",
     "ExplanationProvider",
@@ -37,5 +39,6 @@ __all__ = [
     "ParchiStore",
     "RulesCorpus",
     "SourceDocumentStore",
+    "StoredConsent",
     "TaskTokenStore",
 ]

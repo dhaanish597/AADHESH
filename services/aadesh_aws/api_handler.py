@@ -29,8 +29,13 @@ from aadesh_aws.runtime import Config, build_application, now
 from aadesh_core.domain import Principal
 from aadesh_core.errors import (
     AadeshError,
+    AuthenticatedPrincipalRequired,
     AuthorizationDenied,
     AuthorizationUnavailable,
+    ConsentRefused,
+    ConsentStoreConflict,
+    OperationalWriteDenied,
+    RosterSiteUnavailable,
     TokenRejected,
     WrongWorker,
 )
@@ -72,42 +77,49 @@ def _query(event: dict[str, Any]) -> dict[str, str]:
 
 
 def _claims(event: dict[str, Any]) -> dict[str, Any]:
-    return ((event.get("requestContext") or {}).get("authorizer") or {}).get("claims") or {}
+    claims = ((event.get("requestContext") or {}).get("authorizer") or {}).get("claims")
+    return claims if isinstance(claims, dict) else {}
 
 
-def _principal(event: dict[str, Any], *, default_role: str) -> Principal | None:
-    """The authenticated principal, or None when the authorizer did not run.
+class PrincipalClaimError(Exception):
+    """Verified Cognito identity is missing a valid administrator-provisioned role profile."""
 
-    Returning None lets the application fall back to its configured demonstration principal,
-    which is what happens on the two routes that are not behind the authorizer. On an
-    authenticated route there is always a `sub`, so the real principal is what Cedar sees.
 
-    `principal_id` is `custom:principal_id` when the pool carries it, and the Cognito `sub` only
-    as a fallback. The distinction is load-bearing, not cosmetic: `parchi_resource()` builds
-    `EntityRef("Principal", parchi.worker_id)` and the rule is `resource.worker == principal`,
-    which is ENTITY equality on the id. A `sub` UUID can never satisfy it for a worker whose
-    parchi names `worker-001`, so using `sub` here would make a signed-in worker permanently
-    unable to acknowledge their own Parchi -- the exact failure the `no-proxy-acknowledgement`
-    forbid rule is written to distinguish from a proxy attempt.
+VALID_ROLES = frozenset({"supervisor", "facilitator", "worker"})
 
-    The value is read from a verified claim and never from the request body. A body-supplied
-    `worker_id` is not consulted anywhere in this module.
-    """
+
+def _principal(event: dict[str, Any]) -> Principal:
+    """Build a principal only from verified, provisioned Cognito claims; never invent a role."""
     claims = _claims(event)
-    sub = str(claims.get("sub") or "").strip()
-    if not sub:
-        return None
-    role = str(claims.get("custom:role") or claims.get("role") or default_role).strip()
-    assigned_site = str(
-        claims.get("custom:assigned_site") or claims.get("assigned_site") or ""
-    ).strip()
-    principal_id = (
-        str(claims.get("custom:principal_id") or claims.get("principal_id") or "").strip() or sub
-    )
+    sub = claims.get("sub")
+    if not isinstance(sub, str) or not sub.strip() or sub != sub.strip():
+        raise PrincipalClaimError()
+    role_claim = claims.get("custom:role")
+    if not isinstance(role_claim, str) or role_claim not in VALID_ROLES:
+        raise PrincipalClaimError()
+    role = role_claim
+    site_claim = claims.get("custom:assigned_site")
+    if site_claim is not None and (
+        not isinstance(site_claim, str)
+        or not site_claim.strip()
+        or site_claim != site_claim.strip()
+    ):
+        raise PrincipalClaimError()
+    assigned_site = site_claim.strip() if isinstance(site_claim, str) else None
+    if role == "supervisor" and assigned_site is None:
+        raise PrincipalClaimError()
+    principal_claim = claims.get("custom:principal_id")
+    if principal_claim is not None and (
+        not isinstance(principal_claim, str)
+        or not principal_claim.strip()
+        or principal_claim != principal_claim.strip()
+    ):
+        raise PrincipalClaimError()
+    principal_id = principal_claim.strip() if isinstance(principal_claim, str) else sub.strip()
     return Principal(
         principal_id=principal_id,
-        role=role or default_role,
-        assigned_site=assigned_site or None,
+        role=role,
+        assigned_site=assigned_site,
     )
 
 
@@ -134,11 +146,30 @@ def handle(event: dict[str, Any], context: Any = None) -> dict[str, Any]:
     except AuthorizationUnavailable as exc:
         # Fail closed, and say which failure it is: an outage is not a denial.
         return _error(503, "AUTHORIZATION_UNAVAILABLE", str(exc))
+    except ConsentStoreConflict:
+        # A stale write lost its race against a newer consent decision. Retrying with fresh
+        # state is safe; applying the stale write is not. Nothing was written.
+        return _error(
+            409,
+            "CONSENT_CONFLICT",
+            "The consent changed while this request was being processed. Please try again.",
+        )
+    except ConsentRefused as exc:
+        # The message is a fixed, safe sentence chosen per case -- never a lookup result.
+        return _error(403, "CONSENT_REFUSED", str(exc))
     except TokenRejected:
         # Every rejection is reported identically. Which one it was is for the audit log.
         return _error(400, "TOKEN_REJECTED", "This acknowledgement link cannot be honoured.")
     except WrongWorker as exc:
         return _error(403, "WRONG_WORKER", exc.message)
+    except PrincipalClaimError:
+        return _error(403, "INVALID_PRINCIPAL", "A provisioned role and identity are required.")
+    except AuthenticatedPrincipalRequired:
+        return _error(403, "INVALID_PRINCIPAL", "A provisioned role and identity are required.")
+    except OperationalWriteDenied as exc:
+        return _error(403, "OPERATIONAL_WRITE_DENIED", str(exc))
+    except RosterSiteUnavailable as exc:
+        return _error(403, "ROSTER_ACCESS_DENIED", str(exc))
     except AadeshError as exc:
         return _error(400, type(exc).__name__, str(exc))
     except Exception as exc:
@@ -166,41 +197,52 @@ def _get(path: str, event: dict[str, Any]) -> dict[str, Any]:
         return _response(200, build_application(config).latest_reading())
 
     if path == "/api/supervisor":
+        principal = _principal(event)
         app = build_application(config)
         return _response(
             200,
             app.supervisor(
                 scenario=query.get("scenario", "replay"),
                 reading=query.get("reading", "aligned"),
-                principal=_principal(event, default_role="supervisor"),
+                principal=principal,
             ),
         )
 
     if path == "/api/roster":
-        return _response(200, build_application(config).impact())
+        principal = _principal(event)
+        app = build_application(config)
+        app.authorize_roster_access(principal=principal, site_id=query.get("site_id"))
+        return _response(200, app.impact())
 
     if path == "/api/roster/qr":
+        principal = _principal(event)
         return _response(
-            200, build_application(config).roster_qr(scenario=query.get("scenario", "replay"))
+            200,
+            build_application(config).roster_qr(
+                scenario=query.get("scenario", "current"),
+                principal=principal,
+                site_id=query.get("site_id"),
+            ),
         )
 
     if path == "/api/facilitator":
+        principal = _principal(event)
         app = build_application(config)
-        return _response(
-            200, app.facilitator(principal=_principal(event, default_role="facilitator"))
-        )
+        return _response(200, app.facilitator(principal=principal))
 
     if path == "/api/verify":
+        _principal(event)
         return _response(200, build_application(config).verify())
 
     if path in ("/api/explain", "/api/explanation"):
+        principal = _principal(event)
         app = build_application(config)
         return _response(
             200,
             app.explain(
                 scenario=query.get("scenario", "replay"),
                 reading=query.get("reading", "aligned"),
-                principal=_principal(event, default_role="supervisor"),
+                principal=principal,
             ),
         )
 
@@ -217,28 +259,28 @@ def _post(path: str, event: dict[str, Any]) -> dict[str, Any]:
     config = Config.from_env()
 
     if path == "/api/standing-order":
-        scenario = str(body.get("scenario", "replay"))
+        scenario = str(body.get("scenario", "current"))
+        principal = _principal(event)
         app = build_application(config)
         order = app.create_standing_order(
             scenario=scenario,
-            principal=_principal(event, default_role="supervisor"),
+            principal=principal,
         )
         # Signing the order and opening its Parchis happened above; STARTING the run is the
         # event bus's job (the API has no states:StartExecution). A publish that fails is
         # reported rather than raised: the signed pre-commitment and its Parchis are already
         # facts, and telling the supervisor otherwise would be false.
-        invocation = app.resolve(scenario=scenario)
-        stage = invocation.stage
+        invocation = app.operational_invocation
         workflow = publish_stage_invocation(
             order_id=order.standing_order_id,
             site_id=config.site_id,
-            scenario=scenario,
+            scenario="current",
             # The SAME key open_parchis() used, so the machine's CreateParchis step finds these
             # Parchis instead of minting a second set for one trigger.
             execution_id=f"exec-{order.standing_order_id}",
-            stage=stage.stage if stage else None,
-            order_doc_id=stage.order_doc_id if stage else None,
-            order_sha256=stage.order_sha256 if stage else None,
+            stage=invocation.stage if invocation else None,
+            order_doc_id=invocation.order_doc_id if invocation else None,
+            order_sha256=invocation.order_sha256 if invocation else None,
             bus_name=config.event_bus_name,
         )
         return _response(
@@ -251,9 +293,14 @@ def _post(path: str, event: dict[str, Any]) -> dict[str, Any]:
         )
 
     if path == "/api/roster/qr":
+        principal = _principal(event)
         return _response(
             200,
-            build_application(config).roster_qr(scenario=str(body.get("scenario", "replay"))),
+            build_application(config).roster_qr(
+                scenario=str(body.get("scenario", "current")),
+                principal=principal,
+                site_id=str(body.get("site_id") or "") or None,
+            ),
         )
 
     if path == "/api/worker/view":
@@ -267,34 +314,80 @@ def _post(path: str, event: dict[str, Any]) -> dict[str, Any]:
             ),
         )
 
+    if path == "/api/consent/grant":
+        principal = _principal(event)
+        # The actor is the verified principal, never the body. Only a provisioned worker may
+        # grant consent, and only for a Parchi their own identity owns -- both re-checked by
+        # the application against the Parchi's stored worker. A facilitator or supervisor
+        # cannot grant on the worker's behalf.
+        if principal.role != "worker":
+            return _error(
+                403,
+                "AUTHORIZATION_DENIED",
+                "Only the worker named on the Parchi may grant consent for their own claim.",
+            )
+        app = build_application(config)
+        return _response(
+            200,
+            app.grant_consent(
+                parchi_id=str(body.get("parchi_id", "")),
+                worker_id=str(body.get("worker_id", "")),
+                facilitator_id=str(body.get("facilitator_id") or "") or None,
+                actor_worker_id=principal.principal_id,
+            ),
+        )
+
+    if path == "/api/consent/revoke":
+        principal = _principal(event)
+        # There is no other, explicitly authorized revocation mechanism in this codebase, so
+        # only the worker themselves may revoke. The application verifies the principal is the
+        # worker named on the consent, not merely that they are signed in.
+        if principal.role != "worker":
+            return _error(
+                403,
+                "AUTHORIZATION_DENIED",
+                "Only the worker named on the consent may revoke it.",
+            )
+        app = build_application(config)
+        return _response(
+            200,
+            app.revoke_consent(
+                context_id=str(body.get("context_id", "")),
+                actor_worker_id=principal.principal_id,
+            ),
+        )
+
     if path == "/api/cedar/supervisor-acknowledge":
+        principal = _principal(event)
         app = build_application(config)
         return _response(
             200,
             app.cedar_supervisor_acknowledge(
                 str(body.get("worker_id", "worker-001")),
-                principal=_principal(event, default_role="supervisor"),
+                principal=principal,
             ),
         )
 
     if path == "/api/assist":
+        principal = _principal(event)
         app = build_application(config)
         return _response(
             200,
             app.assist(
                 worker_id=str(body.get("worker_id", "worker-001")),
                 parchi_id=str(body.get("parchi_id", "")),
-                principal=_principal(event, default_role="facilitator"),
+                principal=principal,
             ),
         )
 
     if path in ("/api/explain", "/api/explanation"):
+        principal = _principal(event)
         app = build_application(config)
         return _response(
             200,
             app.explain(
                 scenario=str(body.get("scenario", "replay")),
-                principal=_principal(event, default_role="supervisor"),
+                principal=principal,
             ),
         )
 

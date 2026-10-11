@@ -23,10 +23,8 @@ import {
 import { Qr } from "@/components/Qr";
 import {
   OperationsWorkspace,
-  SiteObjectInspector,
   type SceneObjectKey,
 } from "@/components/OperationsWorkspace";
-import { SceneObjectToggle } from "./SceneObjectToggle";
 import { getJson, postJson, failureOf, type ApiFailure } from "@/lib/api";
 import { formatInstant, freshnessLabel, shortHash, stageName } from "@/lib/format";
 import type { Obligation, SupervisorPayload } from "@/lib/types";
@@ -50,7 +48,7 @@ function Segmented<T extends string>({
   label,
 }: {
   value: T;
-  options: { value: T; label: string }[];
+  options: { value: T; label: string; disabled?: boolean }[];
   onChange: (v: T) => void;
   label: string;
 }) {
@@ -63,6 +61,7 @@ function Segmented<T extends string>({
             key={opt.value}
             type="button"
             aria-pressed={value === opt.value}
+            disabled={opt.disabled}
             onClick={() => onChange(opt.value)}
             className={`px-3 py-1.5 text-xs font-medium transition-colors duration-200 ${
               value === opt.value
@@ -153,7 +152,10 @@ function ObligationCard({ obligation }: { obligation: Obligation }) {
 }
 
 export default function SupervisorPage() {
-  const [scenario, setScenario] = useState<Scenario>("current");
+  const [demoMode, setDemoMode] = useState(process.env.NEXT_PUBLIC_AADESH_DEMO === "1");
+  const [modeReady, setModeReady] = useState(false);
+  const [scenario, setScenario] = useState<Scenario>(process.env.NEXT_PUBLIC_AADESH_DEMO === "1" ? "replay" : "current");
+  const [activeWorkspaceView, setActiveWorkspaceView] = useState<"site" | "missions" | "workers" | "orders" | "evidence">("site");
   const [reading, setReading] = useState<ReadingKey>("aligned");
   const [data, setData] = useState<SupervisorPayload | null>(null);
   const [error, setError] = useState<ApiFailure | null>(null);
@@ -163,24 +165,51 @@ export default function SupervisorPage() {
   const [qrBusy, setQrBusy] = useState(false);
   const [workerQuery, setWorkerQuery] = useState("");
   const [workerFilter, setWorkerFilter] = useState<
-    "all" | "pending" | "acknowledged" | "documentation" | "issued"
+    "all" | "pending" | "acknowledged" | "documentation" | "issued" | "registered"
   >("all");
   const [selectedWorkerId, setSelectedWorkerId] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [selectedObject, setSelectedObject] = useState<SceneObjectKey | null>(null);
-  const [inspectorOpen, setInspectorOpen] = useState(false);
+
+  useEffect(() => {
+    const view = new URLSearchParams(window.location.search).get("view");
+    if (view === "missions" || view === "workers" || view === "orders" || view === "evidence") {
+      setActiveWorkspaceView(view);
+    }
+    const demo = process.env.NEXT_PUBLIC_AADESH_DEMO === "1" ||
+      new URLSearchParams(window.location.search).get("demo") === "1" ||
+      window.sessionStorage.getItem("aadesh_demo") === "1";
+    setDemoMode(demo);
+    if (demo) setScenario("replay");
+    setModeReady(true);
+  }, []);
 
   const load = useCallback(async (sc: Scenario, rd: ReadingKey) => {
+    if (!modeReady) return;
     setError(null);
     try {
       const payload = await getJson<SupervisorPayload>(
         `/api/supervisor?scenario=${sc}&reading=${rd}`,
       );
       setData(payload);
+      // In demo mode, also load real QR tokens if a standing order exists. This is inlined
+      // rather than calling loadQr so that `load` does not reference a binding declared later
+      // in the component body.
+      if (demoMode && payload.standing_order) {
+        setQrBusy(true);
+        try {
+          const roster = await postJson<{ workers: QrWorker[] }>("/api/roster/qr", {
+            scenario: "replay",
+          });
+          setWorkers(roster.workers);
+        } finally {
+          setQrBusy(false);
+        }
+      }
     } catch (err) {
       setError(failureOf(err));
     }
-  }, []);
+  }, [demoMode, modeReady]);
 
   useEffect(() => {
     setData(null);
@@ -188,6 +217,28 @@ export default function SupervisorPage() {
   }, [scenario, reading, load]);
 
   const createOrder = async () => {
+    if (demoMode) {
+      // In demo mode, create a real standing order against the historical replay
+      setBusy(true);
+      setError(null);
+      setNotice(null);
+      try {
+        await postJson<{
+          standing_order: unknown;
+          impact: SupervisorPayload["impact"];
+          order_status: string;
+        }>("/api/standing-order", { scenario: "replay" });
+        await load("replay", reading);
+        setNotice(
+          "Historical replay demonstration: a Standing Order was created against the revoked January 2026 Stage III invocation. QR tokens for workers are now available. This is not a current restriction.",
+        );
+      } catch (err) {
+        setError(failureOf(err));
+      } finally {
+        setBusy(false);
+      }
+      return;
+    }
     if (!replayCanRun) {
       setNotice(
         "Preview only: no active official Stage III invocation is available in the current corpus.",
@@ -198,16 +249,16 @@ export default function SupervisorPage() {
     setError(null);
     setNotice(null);
     try {
-      const res = await postJson<{
+      await postJson<{
         standing_order: unknown;
         impact: SupervisorPayload["impact"];
+        order_status: string;
       }>("/api/standing-order", { scenario });
       await load(scenario, reading);
       await loadQr();
       setNotice(
-        "Historical replay ran locally: the Standing Order was authorized, and demo Parchis were opened.",
+        "Stage III replay ran against the local backend: the Standing Order was authorized and demo Parchis were opened. This is not a current restriction.",
       );
-      void res;
     } catch (err) {
       setError(failureOf(err));
     } finally {
@@ -218,7 +269,7 @@ export default function SupervisorPage() {
   const loadQr = async () => {
     setQrBusy(true);
     try {
-      const res = await postJson<{ workers: QrWorker[] }>("/api/roster/qr", { scenario });
+      const res = await postJson<{ workers: QrWorker[] }>("/api/roster/qr", { scenario: demoMode ? "replay" : scenario });
       setWorkers(res.workers);
     } catch (err) {
       setError(failureOf(err));
@@ -250,7 +301,8 @@ export default function SupervisorPage() {
       worker.state === "acknowledged" || worker.state === "sealed";
     const matchesFilter =
       workerFilter === "all"
-        || (workerFilter === "pending" && !acknowledged)
+        || (workerFilter === "registered" && worker.registered)
+        || (workerFilter === "pending" && Boolean(worker.parchi_id) && !acknowledged)
         || (workerFilter === "acknowledged" && acknowledged)
         || (workerFilter === "documentation" && !worker.registered)
         || (workerFilter === "issued" && Boolean(worker.parchi_id));
@@ -258,11 +310,11 @@ export default function SupervisorPage() {
   }) ?? [];
 
   return (
-    <div className="mx-auto max-w-5xl px-5 py-8 lg:px-10 lg:py-10">
+    <div className="mx-auto max-w-[1440px] px-5 py-6 lg:px-7 lg:py-8">
       <header className="flex flex-wrap items-end justify-between gap-4 border-b border-line pb-5">
         <div>
           <div className="label">Supervisor console</div>
-          <h1 className="mt-1 font-mono text-xl font-semibold tracking-tight">
+          <h1 className="mt-1 font-sans text-2xl font-semibold tracking-tight text-ink">
             {data?.site.label ?? "Construction Site — Delhi-NCR"}
           </h1>
           <p className="mt-1 text-sm text-dim">
@@ -276,23 +328,34 @@ export default function SupervisorPage() {
             onChange={(v) => setScenario(v)}
             options={[
               { value: "replay", label: "Stage III replay" },
-              { value: "current", label: "Current corpus" },
+              { value: "current", label: "Current corpus", disabled: demoMode },
             ]}
           />
           <Segmented
-            label="Station reading"
+            label={demoMode ? "Synthetic reading · illustrative" : "Station reading"}
             value={reading}
             onChange={(v) => setReading(v)}
             options={[
-              { value: "aligned", label: "Aligned" },
-              { value: "divergent", label: "Divergent" },
-              { value: "none", label: "None" },
+              { value: "aligned", label: "Aligned", disabled: demoMode },
+              { value: "divergent", label: "Divergent", disabled: demoMode },
+              { value: "none", label: "None", disabled: demoMode },
             ]}
           />
         </div>
       </header>
 
-      {error && <div className="mt-5"><ApiErrorNote error={error} /></div>}
+      {error && (
+        <div className="mt-5 space-y-2">
+          <ApiErrorNote error={error} />
+          <Button
+            variant="secondary"
+            onClick={() => void load(scenario, reading)}
+            disabled={busy}
+          >
+            Retry resolver request
+          </Button>
+        </div>
+      )}
 
       {!data && !error && (
         <Loading label="Resolving obligations from the verified corpus" />
@@ -300,9 +363,55 @@ export default function SupervisorPage() {
 
       {data && (
         <div className="mt-6 space-y-6">
+          <section className="state-banner" data-state={data.stage_detail.is_replay ? "caution" : data.official_stage === "NONE" ? "clear" : "halt"} aria-live="polite">
+            <div>
+              <div className="label">{data.stage_detail.is_replay ? "Historical record · not in force" : "Official stage status"}</div>
+              <h2>{data.stage_detail.is_replay ? "STAGE III REPLAY — REVOKED" : data.official_stage === "NONE" ? "NO CURRENT INVOCATION RECORDED" : "WORK STOPPED"}</h2>
+              {data.stage_detail.is_replay && (
+                <p className="mt-2 max-w-3xl text-sm leading-relaxed text-ink/90">
+                  Historical replay — the January 2026 Stage III invocation was revoked. This is
+                  not a current restriction. No entitlement amount is encoded in the verified
+                  corpus.
+                </p>
+              )}
+            </div>
+          </section>
+          {data.stage_detail.is_replay && <p className="provenance-line">Stage III · invoked by CAQM order 16 Jan 2026 · revoked 22 Jan 2026 · replaying a cited invocation · sha256 {data.stage_detail.order_short_hash} · synthetic AQI shown for workflow only; it does not invoke a stage.</p>}
+          <nav className="workspace-nav" aria-label="Supervisor workspace">
+            {([
+              ["site", "Site"],
+              ["missions", "Missions"],
+              ["workers", "Workers"],
+              ["orders", "Orders"],
+              ["evidence", "Evidence"],
+            ] as const).map(([view, label]) => (
+              <button
+                key={view}
+                type="button"
+                aria-current={activeWorkspaceView === view ? "page" : undefined}
+                onClick={() => setActiveWorkspaceView(view)}
+                className={activeWorkspaceView === view ? "workspace-nav-link is-active" : "workspace-nav-link"}
+              >
+                {label}
+              </button>
+            ))}
+          </nav>
           {/* ---------------------------------------------------- operations workspace */}
-          <OperationsWorkspace payload={data} error={error} busy={busy}>
+          <OperationsWorkspace
+            payload={data}
+            error={error}
+            selectedObject={selectedObject}
+            onSelectObject={(object) => setSelectedObject((current) => current === object ? null : object)}
+            onCloseInspector={() => setSelectedObject(null)}
+            activeWorkspaceView={activeWorkspaceView}
+            onNavigateView={setActiveWorkspaceView}
+            onOpenWorkers={(filter) => {
+              setWorkerFilter(filter);
+              setActiveWorkspaceView("workers");
+            }}
+          >
             {/* ---------------------------------------------------- stage status */}
+            {activeWorkspaceView === "site" && (
             <Panel
               title="Stage status"
               subtitle="The stage is invoked by a CAQM order, not computed from a reading."
@@ -433,8 +542,10 @@ export default function SupervisorPage() {
                 </p>
               )}
             </Panel>
+            )}
 
             {/* ---------------------------------------------------- obligations */}
+            {activeWorkspaceView === "missions" && (
             <Panel
               title="Your obligations"
               subtitle={
@@ -485,8 +596,10 @@ export default function SupervisorPage() {
                 </p>
               )}
             </Panel>
+            )}
 
             {/* ---------------------------------------------------- standing order */}
+            {activeWorkspaceView === "orders" && (
             <Panel
               title="Standing Order"
               subtitle="One site · exact Stage III trigger · explicit halt and Parchi actions · seven-day validity. No arbitrary code or agent instructions."
@@ -618,7 +731,9 @@ export default function SupervisorPage() {
                 <div className="flex flex-wrap items-center justify-between gap-4">
                   <p className="text-sm text-dim">
                     {replayCanRun
-                      ? "Local in-memory demonstration only. The bundled Stage III record is historical and revoked; running this replay shows the authorization and Parchi flow without creating a current restriction."
+                      ? demoMode
+                        ? "Demonstration: create a Standing Order against the revoked January 2026 Stage III invocation. This opens real Parchis with real QR tokens for the roster. It is a historical replay, not a current restriction."
+                        : "Local in-memory demonstration only. The bundled Stage III record is historical and revoked; running this replay shows the authorization and Parchi flow without creating a current restriction."
                       : "Preview only. The current corpus has no active Stage III invocation, so this local action stays disabled."}
                   </p>
                   <Button onClick={createOrder} disabled={busy || !replayCanRun}>
@@ -655,9 +770,19 @@ export default function SupervisorPage() {
                 </p>
               )}
             </Panel>
+            )}
 
             {/* ---------------------------------------------------- searchable roster */}
-            {workers && (
+            {activeWorkspaceView === "workers" && !workers && (
+              <Panel title="Workforce explorer" subtitle="Load the roster and its available one-time Parchi links. Workers must acknowledge their own records.">
+                <p className="text-sm text-dim">Loading the workforce is a read workflow. It does not issue a new Parchi or acknowledge anyone’s record.</p>
+                <Button className="mt-4" onClick={loadQr} disabled={qrBusy}>
+                  <IconUsers className="h-4 w-4" />
+                  {qrBusy ? "Loading roster…" : "Load worker roster"}
+                </Button>
+              </Panel>
+            )}
+            {activeWorkspaceView === "workers" && workers && (
               <div id="worker-roster" className="scroll-mt-24">
                 <Panel
                   title="Worker roster"
@@ -686,6 +811,12 @@ export default function SupervisorPage() {
                         "documentation",
                         `Documentation missing · ${workers.filter(
                           (w) => !w.registered,
+                        ).length}`,
+                      ],
+                      [
+                        "registered",
+                        `Registration documented · ${workers.filter(
+                          (w) => w.registered,
                         ).length}`,
                       ],
                       [
@@ -817,12 +948,18 @@ export default function SupervisorPage() {
               </div>
             )}
 
-            {workers && workers.length === 0 && (
+            {activeWorkspaceView === "workers" && workers && workers.length === 0 && (
               <p className="text-sm text-dim">
                 No worker records are available in this scenario.
               </p>
             )}
 
+            {activeWorkspaceView === "evidence" && <>
+            <section className="evidence-workspace-intro">
+              <h2 className="text-lg font-semibold text-ink">Evidence trail</h2>
+              <p className="mt-1 max-w-2xl text-sm text-dim">Follow the official invocation and cited clauses back to their source records and verification results.</p>
+              <Link href="/evidence" className="mt-3 inline-flex min-h-11 items-center text-sm text-accent">Open source and provenance explorer</Link>
+            </section>
             <details className="border border-line bg-panel p-4">
               <summary className="cursor-pointer text-sm text-dim">
                 <IconTerminal className="mr-2 inline h-4 w-4" />
@@ -841,29 +978,7 @@ export default function SupervisorPage() {
                 )}
               </pre>
             </details>
-
-            <SceneObjectToggle
-              objects={[
-                { key: "activity-zone", label: "Activity zone" },
-                { key: "dust-zone", label: "Dust zone" },
-                { key: "restricted-area", label: "Restricted area" },
-                { key: "worker-point", label: "Worker point" },
-                { key: "evidence-station", label: "Evidence station" },
-                { key: "terminal", label: "Terminal" },
-              ]}
-              selectedObject={selectedObject}
-              setSelectedObject={setSelectedObject}
-            />
-            {selectedObject && inspectorOpen && (
-              <SiteObjectInspector
-                object={selectedObject}
-                payload={data}
-                onClose={() => {
-                  setSelectedObject(null);
-                  setInspectorOpen(false);
-                }}
-              />
-            )}
+            </>}
           </OperationsWorkspace>
         </div>
       )}

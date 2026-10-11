@@ -129,6 +129,30 @@ class AuthorizationDenied(AadeshError):
         super().__init__("You do not have permission to perform this action.")
 
 
+class OperationalWriteDenied(AadeshError):
+    """An operational write has no verified, current official invocation to rely on."""
+
+    def __init__(self) -> None:
+        super().__init__(
+            "No verified current Stage III invocation is available; "
+            "no operational records were created."
+        )
+
+
+class AuthenticatedPrincipalRequired(AadeshError):
+    """A protected application operation was called without its authenticated principal."""
+
+    def __init__(self) -> None:
+        super().__init__("A provisioned authenticated principal is required.")
+
+
+class RosterSiteUnavailable(AadeshError):
+    """The authenticated principal cannot access this application's configured roster site."""
+
+    def __init__(self) -> None:
+        super().__init__("The requested roster site is not available to this principal.")
+
+
 class ExplanationContractViolation(AadeshError):
     """Generated prose breached its output contract and must not be shown to a user."""
 
@@ -140,6 +164,36 @@ class ExplanationUnavailable(AadeshError):
     correct and remains available; this marks only the optional model layer. Callers surface
     it as the explicit EXPLANATION_UNAVAILABLE state and show the deterministic sentence.
     """
+
+
+class ConsentRefused(AadeshError):
+    """A consent grant or revocation was refused as invalid, unauthorized or out of scope.
+
+    The message is a fixed sentence chosen per case, never the underlying reason a lookup
+    failed: a caller who can tell "that parchi is not yours" apart from "no such parchi" has
+    been handed an oracle for probing which records exist. The specific reason belongs in the
+    audit record, not in the reply.
+    """
+
+    def __init__(self, message: str = "The consent request was refused.") -> None:
+        super().__init__(message)
+
+
+class ConsentStoreConflict(AadeshError):
+    """A consent write lost a compare-and-set against a newer version of the same record.
+
+    This is the mechanism that stops a grant formed before a revocation from resurrecting the
+    consent afterwards: the write carries the version it read, and if the record has moved on
+    -- because the worker revoked, or because another grant superseded it -- the write is
+    refused rather than applied to a state nobody observed. A normal outcome of two requests
+    racing, not a fault.
+    """
+
+    def __init__(self) -> None:
+        super().__init__(
+            "The consent record changed while this request was being processed; the write was "
+            "refused so a newer decision is not overwritten."
+        )
 
 
 class TestOnlyComponentInProduction(AadeshError):

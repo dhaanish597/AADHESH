@@ -32,7 +32,13 @@ export default function AuthCallbackPage() {
       setError("The identity provider returned no token.");
       return;
     }
-    window.location.replace(session.role === "worker" ? "/worker" : "/supervisor");
+    const roleDestinations: Record<string, string> = {
+      supervisor: "/supervisor",
+      worker: "/worker",
+      facilitator: "/facilitator",
+    };
+    const destination = session.role ? roleDestinations[session.role] : undefined;
+    window.location.replace(destination ?? "/login?error=workspace_unavailable");
   }, []);
 
   return (

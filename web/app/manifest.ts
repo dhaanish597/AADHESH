@@ -1,0 +1,16 @@
+import type { MetadataRoute } from "next";
+
+export const dynamic = "force-static";
+
+export default function manifest(): MetadataRoute.Manifest {
+  return {
+    name: "Aadesh · Field Instrument",
+    short_name: "Aadesh",
+    description: "Cited GRAP actions and a worker’s own parchi acknowledgement.",
+    start_url: "/?demo=1",
+    display: "standalone",
+    background_color: "#13161a",
+    theme_color: "#13161a",
+    icons: [{ src: "/icon.svg", sizes: "any", type: "image/svg+xml", purpose: "any" }],
+  };
+}

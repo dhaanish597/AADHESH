@@ -2,7 +2,8 @@
 
 import type { SupervisorPayload } from "@/lib/types";
 import { formatInstant, stageName } from "@/lib/format";
-import { CitationBlock, IconCheck, IconFile, IconUsers } from "@/components/ui";
+import { CitationBlock, IconCheck, IconFile, IconUsers, obligationView } from "@/components/ui";
+import { SiteScene3D } from "@/components/SiteScene3D";
 import type { ReactNode } from "react";
 
 export type SceneObjectKey =
@@ -13,66 +14,17 @@ export type SceneObjectKey =
   | "evidence-station"
   | "terminal";
 
-interface SceneObjectProps {
-  key: SceneObjectKey;
-  selected: boolean;
-  onClick: () => void;
-  label: string;
-  status: "active" | "idle" | "warn" | "unknown";
-  description: string;
+function isRestrictionObligation(item: SupervisorPayload["obligations"][number]) {
+  return /restrict/i.test(`${item.obligation_id} ${item.label} ${item.required_action} ${item.reason}`);
 }
 
-function SceneObject({
-  selected,
-  onClick,
-  label,
-  status,
-}: SceneObjectProps) {
-  const statusMark =
-    status === "active" ? "bg-success" : status === "warn" ? "bg-accent" : status === "unknown" ? "bg-info" : "bg-faint";
-  return (
-    <g
-      className={`site-object ${selected ? "site-object-selected" : ""}`}
-      onClick={onClick}
-      onKeyDown={(event) => {
-        if (event.key === "Enter" || event.key === " ") {
-          event.preventDefault();
-          onClick();
-        }
-      }}
-      tabIndex={0}
-      role="button"
-      aria-pressed={selected}
-      aria-label={label}
-    >
-      <rect
-        x={0}
-        y={0}
-        width={64}
-        height={64}
-        className={`site-object-bg ${statusMark}`}
-        rx={10}
-        strokeWidth={1.4}
-      />
-      <text
-        y={34}
-        className="site-object-mark"
-        textAnchor="middle"
-        fontSize={22}
-      >
-        {label[0].toUpperCase()}
-      </text>
-      <text
-        x={32}
-        y={58}
-        className="site-object-label"
-        textAnchor="middle"
-        fontSize={9}
-      >
-        {label.toUpperCase()}
-      </text>
-    </g>
-  );
+function findSiteObligation(
+  payload: SupervisorPayload,
+  matches: (item: SupervisorPayload["obligations"][number]) => boolean,
+) {
+  return payload.obligations.find((item) => item.applicable === true && matches(item))
+    ?? payload.obligations.find((item) => item.applicable === null && matches(item))
+    ?? null;
 }
 
 interface ProgressNodeProps {
@@ -94,7 +46,7 @@ function ProgressNode({ title, value, total, detail, selected, onClick }: Progre
       aria-pressed={selected}
     >
       <div className="progress-node-glyph">
-        {value >= total ? (
+        {total > 0 && value >= total ? (
           <IconCheck className="h-4 w-4" />
         ) : (
           <span className="progress-node-count">{value}</span>
@@ -115,20 +67,22 @@ interface WorkflowProgressProps {
   data: SupervisorPayload;
 }
 
-export function WorkflowProgress({ data }: WorkflowProgressProps) {
-  const registered = data.impact.affected;
+export function WorkflowProgress({ data, onOpenWorkers }: WorkflowProgressProps & {
+  onOpenWorkers: (filter: "all" | "registered" | "issued" | "pending" | "acknowledged" | "documentation") => void;
+}) {
+  const registered = data.impact.readiness_total;
+  const registrationDocumented = data.impact.readiness_ready;
   const issued = data.impact.documented;
   const acknowledged = data.impact.acknowledged;
-  const reviewed = data.impact.readiness_ready;
 
   return (
-    <div className="workflow-progress" aria-label="Site acknowledgment progress">
+    <div className="workflow-progress" aria-label="Worker workflow progress">
       <div className="workflow-progress-rail">
         {[
-          { title: "Registered", value: registered, total: registered, detail: `${registered} on roster` },
-          { title: "Parchis issued", value: issued, total: registered, detail: `${registered - issued} still to issue` },
-          { title: "Acknowledged", value: acknowledged, total: issued, detail: `${issued - acknowledged} awaiting confirmation` },
-          { title: "Documentation reviewed", value: reviewed, total: data.impact.readiness_total, detail: `${data.impact.readiness_total - reviewed} to prepare` },
+          { title: "Workers rostered", value: registered, total: registered, detail: `${registered} people on this site`, filter: "all" as const },
+          { title: "Registration documented", value: registrationDocumented, total: registered, detail: `${registered - registrationDocumented} records need review`, filter: "registered" as const },
+          { title: "Parchis issued", value: issued, total: registered, detail: `${Math.max(0, registered - issued)} still to issue`, filter: "issued" as const },
+          { title: "Worker acknowledgement", value: acknowledged, total: issued, detail: `${Math.max(0, issued - acknowledged)} awaiting worker action`, filter: "pending" as const },
         ].map((node) => (
           <ProgressNode
             key={node.title}
@@ -137,13 +91,11 @@ export function WorkflowProgress({ data }: WorkflowProgressProps) {
             total={node.total}
             detail={node.detail}
             selected={false}
-            onClick={() => {}}
+            onClick={() => onOpenWorkers(node.filter)}
           />
         ))}
       </div>
-      <p className="text-xs text-faint">
-        Documentation readiness measures registration paperwork, not entitlement. No sum is computed from these counts.
-      </p>
+      <p className="text-xs text-faint">Registration paperwork and worker acknowledgement are separate records. Neither count establishes financial entitlement.</p>
     </div>
   );
 }
@@ -152,9 +104,10 @@ interface InspectorProps {
   object: SceneObjectKey | null;
   payload: SupervisorPayload | null;
   onClose: () => void;
+  onNavigateView: (view: "site" | "missions" | "workers" | "orders" | "evidence") => void;
 }
 
-export function SiteObjectInspector({ object, payload, onClose }: InspectorProps) {
+export function SiteObjectInspector({ object, payload, onClose, onNavigateView }: InspectorProps) {
   if (!object || !payload) return null;
 
   const openCitation = (
@@ -166,15 +119,9 @@ export function SiteObjectInspector({ object, payload, onClose }: InspectorProps
     <CitationBlock sourceDoc={sourceDoc} page={page} quote={quote} hash={hash} />
   );
 
-  const dustObligation =
-    payload.obligations.find((o) => o.label.toLowerCase().includes("dust")) ??
-    null;
-  const restrictionObligation =
-    payload.obligations.find((o) => o.label.toLowerCase().includes("restrict")) ??
-    null;
-  const workerObligation =
-    payload.obligations.find((o) => o.issues_parchi) ??
-    null;
+  const dustObligation = findSiteObligation(payload, (item) => item.label.toLowerCase().includes("dust"));
+  const restrictionObligation = findSiteObligation(payload, isRestrictionObligation);
+  const workerObligation = findSiteObligation(payload, (item) => item.issues_parchi);
 
   return (
     <aside className="site-inspector" aria-live="polite" aria-labelledby="inspector-title">
@@ -197,8 +144,7 @@ export function SiteObjectInspector({ object, payload, onClose }: InspectorProps
           <div className="site-inspector-card">
             <p className="text-sm font-medium text-ink">Construction activity zone</p>
             <p className="mt-2 text-sm text-dim">
-              The active site is a piling operation across multiple pits. Dust-generating work
-              here is subject to the invoked GRAP stage and the obligations below.
+              The site profile identifies {payload.site.activity_type ?? "no activity type"}. The resolver uses this profile and the official invocation to determine applicable obligations. This drawing is not a live site feed.
             </p>
             <dl className="mt-3 space-y-2 text-xs text-dim">
               <div className="grid grid-cols-[minmax(0,9rem)_1fr] gap-2">
@@ -230,8 +176,7 @@ export function SiteObjectInspector({ object, payload, onClose }: InspectorProps
               )}
             </div>
             <p className="mt-2 text-sm text-dim">
-              Dust suppression, water sprinkling, and material-covering obligations apply to the
-              active activity sector. Inspect the cited source to see the exact wording.
+              The status and cited clause below come from the resolver. This inspector does not change whether an activity is permitted.
             </p>
             {dustObligation ? (
               <div className="mt-4 space-y-3">
@@ -243,10 +188,11 @@ export function SiteObjectInspector({ object, payload, onClose }: InspectorProps
                   dustObligation.source_quote,
                   dustObligation.source_hash,
                 )}
+                <button type="button" className="inspector-action" onClick={() => onNavigateView("missions")}>Open mission details</button>
               </div>
             ) : (
               <p className="mt-4 text-xs text-faint">
-                No dust-control obligation applies to this site profile under the current stage.
+                The resolver returned no applicable dust-control record for this site and scenario.
               </p>
             )}
           </div>
@@ -256,8 +202,7 @@ export function SiteObjectInspector({ object, payload, onClose }: InspectorProps
           <div className="site-inspector-card">
             <p className="text-sm font-medium text-ink">Restricted work area</p>
             <p className="mt-2 text-sm text-dim">
-              Work that is not permitted under the invoked stage is shown here with the official
-              condition that governs it.
+              This location is illustrative. Any restriction and cited condition shown here come from the site-level resolver result.
             </p>
             {restrictionObligation ? (
               <div className="mt-4 space-y-3">
@@ -269,10 +214,11 @@ export function SiteObjectInspector({ object, payload, onClose }: InspectorProps
                   restrictionObligation.source_quote,
                   restrictionObligation.source_hash,
                 )}
+                <button type="button" className="inspector-action" onClick={() => onNavigateView("missions")}>Review mission conditions</button>
               </div>
             ) : (
               <p className="mt-4 text-xs text-faint">
-                No restriction is imposed by the current obligations for this site.
+                The resolver returned no applicable restriction record for this site and scenario.
               </p>
             )}
           </div>
@@ -307,6 +253,7 @@ export function SiteObjectInspector({ object, payload, onClose }: InspectorProps
                 Example obligation that issues a Parchi: {workerObligation.obligation_id}
               </div>
             )}
+            <button type="button" className="inspector-action" onClick={() => onNavigateView("workers")}>Open workforce explorer</button>
           </div>
         )}
 
@@ -324,6 +271,7 @@ export function SiteObjectInspector({ object, payload, onClose }: InspectorProps
               <IconFile className="h-3.5 w-3.5" />
               Open verification lab
             </a>
+            <button type="button" className="inspector-action" onClick={() => onNavigateView("evidence")}>Open evidence explorer</button>
             <details className="mt-4 border-t border-line pt-3">
               <summary className="cursor-pointer text-xs text-faint">
                 Current stage record
@@ -381,6 +329,7 @@ export function SiteObjectInspector({ object, payload, onClose }: InspectorProps
                 )}
               </pre>
             </details>
+            <button type="button" className="inspector-action" onClick={() => onNavigateView("orders")}>Open Standing Orders</button>
           </div>
         )}
       </div>
@@ -388,121 +337,32 @@ export function SiteObjectInspector({ object, payload, onClose }: InspectorProps
   );
 }
 
-export function SiteScene({
-  selectedObject,
-  onSelectObject,
-}: {
-  selectedObject: SceneObjectKey | null;
-  onSelectObject: (key: SceneObjectKey) => void;
-}) {
-  const objects: { key: SceneObjectKey; x: number; y: number; label: string; status: SceneObjectProps["status"] }[] = [
-    { key: "activity-zone", x: 80, y: 300, label: "Activity zone", status: "active" },
-    { key: "dust-zone", x: 220, y: 220, label: "Dust zone", status: "active" },
-    { key: "restricted-area", x: 370, y: 320, label: "Restricted area", status: "warn" },
-    { key: "worker-point", x: 520, y: 240, label: "Worker point", status: "idle" },
-    { key: "evidence-station", x: 640, y: 340, label: "Evidence", status: "idle" },
-    { key: "terminal", x: 120, y: 120, label: "Terminal", status: "idle" },
-  ];
-
-  return (
-    <div className="site-scene" aria-label="Interactive site map">
-      <div className="site-scene-surface" aria-hidden="true">
-        <svg
-          viewBox="0 0 720 440"
-          className="site-scene-svg"
-          role="img"
-          aria-label="Illustrative construction site map"
-        >
-          <defs>
-            <linearGradient id="sitePlatform" x1="120" y1="320" x2="620" y2="400" gradientUnits="userSpaceOnUse">
-              <stop stopColor="#243a32" />
-              <stop offset="1" stopColor="#111b19" />
-            </linearGradient>
-            <pattern id="siteGrid" width="24" height="24" patternUnits="userSpaceOnUse">
-              <path d="M24 0H0V24" stroke="#c3d8cc" strokeOpacity="0.08" />
-            </pattern>
-          </defs>
-
-          <path
-            d="M120 320 L540 320 L600 392 L160 392 Z"
-            fill="url(#sitePlatform)"
-            stroke="#496057"
-            strokeWidth={1.2}
-          />
-          <path
-            d="M138 336 L522 336 L576 380 L168 380 Z"
-            fill="url(#siteGrid)"
-            stroke="#9db0a2"
-            strokeOpacity="0.22"
-          />
-
-          {/* access path */}
-          <path
-            d="M120 352 H540"
-            stroke="#1b271f"
-            strokeWidth={14}
-            strokeLinecap="round"
-          />
-          <path
-            d="M120 352 H540"
-            stroke="#c7fb56"
-            strokeWidth={3}
-            strokeLinecap="round"
-            strokeDasharray="5 10"
-            opacity={0.7}
-          />
-
-          {/* site objects */}
-          {objects.map((obj) => (
-            <g
-              key={obj.key}
-              transform={`translate(${obj.x - 32}, ${obj.y - 32})`}
-            >
-              <SceneObject
-                key={obj.key}
-                selected={selectedObject === obj.key}
-                onClick={() => onSelectObject(obj.key)}
-                label={obj.label}
-                status={obj.status}
-                description=""
-              />
-            </g>
-          ))}
-
-          {/* small scene detail dots */}
-          <circle cx="300" cy="360" r="2" fill="#c7fb56" />
-          <circle cx="430" cy="372" r="1.5" fill="#a8e4b3" />
-          <circle cx="510" cy="360" r="1.5" fill="#a8e4b3" />
-        </svg>
-      </div>
-      <div className="site-scene-legend">
-        <span className="site-scene-legend-item">
-          <span className="site-scene-dot bg-success" /> Active
-        </span>
-        <span className="site-scene-legend-item">
-          <span className="site-scene-dot bg-accent" /> Needs attention
-        </span>
-        <span className="site-scene-legend-item">
-          <span className="site-scene-dot bg-faint" /> Idle
-        </span>
-      </div>
-    </div>
-  );
-}
-
 export function OperationsWorkspace({
   payload,
   error,
+  selectedObject,
+  onSelectObject,
+  onCloseInspector,
+  activeWorkspaceView,
+  onNavigateView,
+  onOpenWorkers,
   children,
 }: {
   payload: SupervisorPayload | null;
   error: unknown;
-  busy: boolean;
+  selectedObject: SceneObjectKey | null;
+  onSelectObject: (object: SceneObjectKey) => void;
+  onCloseInspector: () => void;
+  activeWorkspaceView: "site" | "missions" | "workers" | "orders" | "evidence";
+  onNavigateView: (view: "site" | "missions" | "workers" | "orders" | "evidence") => void;
+  onOpenWorkers: (filter: "all" | "registered" | "issued" | "pending" | "acknowledged" | "documentation") => void;
   children?: ReactNode;
 }) {
   if (!payload) {
     return <div className="operations-loading">Resolving site state…</div>;
   }
+  const dustObligation = findSiteObligation(payload, (entry) => /dust/i.test(entry.label));
+  const restrictionObligation = findSiteObligation(payload, isRestrictionObligation);
   return (
     <div className="operations-workspace">
       <header className="operations-header">
@@ -522,38 +382,52 @@ export function OperationsWorkspace({
       ) : (
         <>
           <div className="operations-scene-row">
-            <SiteScene
-              selectedObject={null as SceneObjectKey | null}
-              onSelectObject={() => {}}
+            <SiteScene3D
+              selectedObject={selectedObject}
+              onSelectObject={onSelectObject}
+              payload={payload}
             />
-            <WorkflowProgress data={payload} />
+            {selectedObject ? (
+              <SiteObjectInspector
+                object={selectedObject}
+                payload={payload}
+                onClose={onCloseInspector}
+                onNavigateView={onNavigateView}
+              />
+            ) : (
+              <WorkflowProgress data={payload} onOpenWorkers={onOpenWorkers} />
+            )}
           </div>
 
-          <div className="operations-missions">
+          {(activeWorkspaceView === "site" || activeWorkspaceView === "missions") && <div className="operations-missions">
             <h2 className="text-sm font-semibold text-ink">Missions</h2>
             <ol className="missions-list">
               <MissionItem
                 title="Review dust-control measures"
-                active
                 detail="Inspect the dust-mitigation obligation and its cited source."
+                status={dustObligation ? obligationView(dustObligation.status, dustObligation.applicable).label : "Not in scope"}
+                onClick={() => onSelectObject("dust-zone")}
               />
               <MissionItem
                 title="Review restricted construction activity"
-                active
                 detail="Check which activity is restricted under the invoked stage."
+                status={restrictionObligation ? obligationView(restrictionObligation.status, restrictionObligation.applicable).label : "Check site conditions"}
+                onClick={() => onSelectObject("restricted-area")}
               />
               <MissionItem
                 title="Complete worker communication"
-                active
                 detail={`${payload.impact.documented - payload.impact.acknowledged} Parchis await worker acknowledgement.`}
+                status={`${payload.impact.acknowledged} of ${payload.impact.documented} acknowledged`}
+                onClick={() => onNavigateView("workers")}
               />
               <MissionItem
                 title="Inspect evidence provenance"
-                active
                 detail="Follow a citation back to the official source."
+                status={payload.fully_sourced ? "Sources verified" : "Source review needed"}
+                onClick={() => onNavigateView("evidence")}
               />
             </ol>
-          </div>
+          </div>}
 
           {children}
         </>
@@ -564,22 +438,27 @@ export function OperationsWorkspace({
 
 export function MissionItem({
   title,
-  active,
   detail,
+  status,
+  onClick,
 }: {
   title: string;
-  active?: boolean;
   detail?: string;
+  status: string;
+  onClick: () => void;
 }) {
   return (
-    <li className={`mission-item ${active ? "mission-item-active" : ""}`}>
+    <li className="mission-item">
+      <button type="button" className="mission-item-button" onClick={onClick}>
       <div className="mission-item-check" aria-hidden="true">
-        <span className="site-scene-dot bg-accent" />
+        <span className="site-scene-dot bg-faint" />
       </div>
       <div>
         <div className="text-sm font-medium text-ink">{title}</div>
         {detail && <div className="text-xs text-dim">{detail}</div>}
       </div>
+      <span className="mission-item-status">{status}</span>
+      </button>
     </li>
   );
 }

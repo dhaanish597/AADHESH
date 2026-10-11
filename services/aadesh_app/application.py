@@ -17,6 +17,7 @@ opens parchis and serialises, and adds no rule of its own.
 from __future__ import annotations
 
 import io
+import secrets
 from collections.abc import Callable, Sequence
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -24,7 +25,14 @@ from typing import Any, Protocol
 
 from aadesh_core.authorization import AuthorizationService
 from aadesh_core.authorization.service import ASSIST_CLAIM, VIEW_PARCHI
-from aadesh_core.consent import ClaimAssistanceContext, grant_consent, request_assistance
+from aadesh_core.consent import (
+    ClaimAssistanceContext,
+    grant_consent,
+    request_assistance,
+)
+from aadesh_core.consent import (
+    revoke_consent as _revoke_consent,
+)
 from aadesh_core.domain import (
     ConstructionSite,
     InvocationLifecycle,
@@ -32,7 +40,9 @@ from aadesh_core.domain import (
     Principal,
     Provenance,
     ReplayContext,
+    ResolutionMode,
     ResolutionResult,
+    SourceState,
     StationReading,
 )
 from aadesh_core.domain.enums import (
@@ -40,7 +50,17 @@ from aadesh_core.domain.enums import (
     StandingOrderAction,
     StandingOrderStatus,
 )
-from aadesh_core.errors import AuthorizationDenied, TokenRejected, WrongWorker
+from aadesh_core.errors import (
+    AuthenticatedPrincipalRequired,
+    AuthorizationDenied,
+    ConsentRefused,
+    ConsentStoreConflict,
+    CorpusIntegrityError,
+    OperationalWriteDenied,
+    RosterSiteUnavailable,
+    TokenRejected,
+    WrongWorker,
+)
 from aadesh_core.parchi import Parchi
 from aadesh_core.parchi_ack import (
     ParchiProvenance,
@@ -98,6 +118,20 @@ def citation_dict(citation: Any) -> dict[str, Any] | None:
         "source_quote": citation.quote,
         "source_hash": citation.source_hash,
         "short_hash": (citation.source_hash or "")[:8],
+    }
+
+
+def consent_dict(consent: ClaimAssistanceContext) -> dict[str, Any]:
+    """A consent as the API returns it. Ids and instants only -- never the worker."""
+    return {
+        "context_id": consent.context_id,
+        "parchi_id": consent.parchi_id,
+        "worker_id": consent.worker_id,
+        "facilitator_id": consent.facilitator_id,
+        "consent_granted": consent.consent_granted,
+        "granted_at": consent.granted_at.isoformat(),
+        "expires_at": consent.expires_at.isoformat(),
+        "revoked_at": consent.revoked_at.isoformat() if consent.revoked_at else None,
     }
 
 
@@ -198,7 +232,10 @@ class AadeshApplication:
         task_tokens: Any = None,
         qr_cache: QrLinkCache | None = None,
         readings_store: Any = None,
+        consent_store: Any = None,
         explanation_model_factory: Callable[[], Any] | None = None,
+        allow_demo_replay_writes: bool = False,
+        allow_demo_principal_fallback: bool = False,
     ) -> None:
         self.site = site
         self.roster = roster
@@ -221,10 +258,19 @@ class AadeshApplication:
         self._task_tokens = task_tokens
         self._qr_cache = qr_cache
         self._readings_store = readings_store
+        # When a durable consent store is installed it is the ONE source of consent; the local
+        # dictionary below is then never read or written. On AWS the store is DynamoDB, so a
+        # grant survives into the next invocation and a revocation reaches every one of them.
+        self._consent_store = consent_store
         self._explanation_model_factory = explanation_model_factory
+        # Only explicit local-demo wiring may create synthetic replay artifacts.
+        self._allow_demo_replay_writes = allow_demo_replay_writes
+        self._allow_demo_principal_fallback = allow_demo_principal_fallback
         self._order: StandingOrder | None = None
+        self._operational_invocation: Any = None
         self._payloads: dict[str, str] = {}
         self._opened = False
+        self._consents: dict[str, ClaimAssistanceContext] = {}  # context_id -> consent
 
     # -- authorized principals ---------------------------------------------
 
@@ -236,6 +282,13 @@ class AadeshApplication:
         if role == "facilitator":
             return Principal(principal_id=self.facilitator_id, role="facilitator")
         return Principal(principal_id=role, role="worker")
+
+    def _require_principal(self, principal: Principal | None, *, demo_role: str) -> Principal:
+        if principal is not None:
+            return principal
+        if self._allow_demo_principal_fallback:
+            return self.principal(demo_role)
+        raise AuthenticatedPrincipalRequired()
 
     # -- resolution ---------------------------------------------------------
 
@@ -271,7 +324,7 @@ class AadeshApplication:
         reading: str = "aligned",
         principal: Principal | None = None,
     ) -> dict[str, Any]:
-        who = principal or self.principal("supervisor")
+        who = self._require_principal(principal, demo_role="supervisor")
         self.authz_service.require_view_site_execution(
             principal=who, site_id=self.site_id, now=datetime.now(UTC)
         )
@@ -505,13 +558,14 @@ class AadeshApplication:
     # -- standing order + parchis ------------------------------------------
 
     def create_standing_order(
-        self, *, scenario: str = "replay", principal: Principal | None = None
+        self, *, scenario: str = "current", principal: Principal | None = None
     ) -> StandingOrder:
         now = datetime.now(UTC)
-        who = principal or self.principal("supervisor")
+        who = self._require_principal(principal, demo_role="supervisor")
         # The supervisor must be authorized to halt THIS site. Cedar decides it, against the
         # AUTHENTICATED principal's own assignment -- not against a configured default.
         self.authz_service.require_issue_halt(principal=who, site_id=self.site_id, now=now)
+        result = self._operational_write_result(scenario=scenario)
         order = StandingOrder(
             standing_order_id=f"so-{now.strftime('%Y%m%dT%H%M%S')}-{now.microsecond:06d}",
             site_id=self.site_id,
@@ -537,10 +591,46 @@ class AadeshApplication:
         if self._order_store is not None:
             self._order_store.save(order)
         if not self._opened:
-            self.open_parchis(
-                scenario=scenario, execution_id=f"exec-{order.standing_order_id}", now=now
+            self._open_parchis_for_result(
+                result=result, execution_id=f"exec-{order.standing_order_id}", now=now
             )
+        self._operational_invocation = result.stage
         return order
+
+    def _operational_write_result(self, *, scenario: str) -> ResolutionResult:
+        """Resolve and validate the official invocation before any operational write."""
+        if scenario == "replay":
+            if self._allow_demo_replay_writes:
+                return self.resolve(scenario="replay")
+            raise OperationalWriteDenied()
+        if scenario != "current":
+            raise OperationalWriteDenied()
+
+        try:
+            result = self.resolve(scenario="current")
+        except CorpusIntegrityError:
+            # A corrupt/unprovable invocation is an operational denial, not a legal fact.
+            raise OperationalWriteDenied() from None
+        invocation = result.stage
+        if (
+            result.mode is not ResolutionMode.CURRENT
+            or invocation is None
+            or not invocation.is_current
+            or invocation.source_state is not SourceState.VERIFIED
+            or invocation.citation is None
+            or invocation.citation.source_doc != invocation.order_doc_id
+            or invocation.citation.source_hash != invocation.order_sha256
+            or not invocation.order_sha256
+            or invocation.invoked_at > result.resolved_at
+            or invocation.stage != 3
+        ):
+            raise OperationalWriteDenied()
+        return result
+
+    @property
+    def operational_invocation(self) -> Any:
+        """The verified invocation used for the just-created order, for its event detail."""
+        return self._operational_invocation
 
     def standing_order_payload(self) -> dict[str, Any]:
         order = self._current_order()
@@ -603,7 +693,7 @@ class AadeshApplication:
     def open_parchis(
         self,
         *,
-        scenario: str = "replay",
+        scenario: str = "current",
         execution_id: str | None = None,
         now: datetime | None = None,
     ) -> dict[str, Any]:
@@ -613,8 +703,17 @@ class AadeshApplication:
         `execution_id` the API used. That shared key is what makes the two callers safe: the
         second one finds the first one's parchis instead of minting a second set.
         """
+        result = self._operational_write_result(scenario=scenario)
+        return self._open_parchis_for_result(result=result, execution_id=execution_id, now=now)
+
+    def _open_parchis_for_result(
+        self,
+        *,
+        result: ResolutionResult,
+        execution_id: str | None = None,
+        now: datetime | None = None,
+    ) -> dict[str, Any]:
         moment = now or datetime.now(UTC)
-        result = self.resolve(scenario=scenario)
         resolved_execution_id = execution_id or (
             f"exec-{self._order.standing_order_id}" if self._order else "exec-standalone"
         )
@@ -651,6 +750,7 @@ class AadeshApplication:
                 }
             )
         self._opened = True
+        self._operational_invocation = result.stage
         return {
             "execution_id": resolved_execution_id,
             "parchis": opened,
@@ -695,7 +795,14 @@ class AadeshApplication:
             ),
         }
 
-    def roster_qr(self, *, scenario: str = "replay") -> dict[str, Any]:
+    def roster_qr(
+        self,
+        *,
+        scenario: str = "replay",
+        principal: Principal | None = None,
+        site_id: str | None = None,
+    ) -> dict[str, Any]:
+        self.authorize_roster_access(principal=principal, site_id=site_id)
         by_worker = {p.worker_id: p for p in self.store.for_site(self.site_id)}
         items = []
         for entry in self.roster.active_entries():
@@ -715,6 +822,21 @@ class AadeshApplication:
             "impact": self.impact(),
             "qr_minted": sum(1 for item in items if item["payload"]),
         }
+
+    def authorize_roster_access(
+        self, *, principal: Principal | None, site_id: str | None = None
+    ) -> None:
+        """Authorize access to this app's roster using the existing Cedar site policy."""
+        who = self._require_principal(principal, demo_role="supervisor")
+        requested_site = site_id or self.site_id
+        self.authz_service.require_view_site_execution(
+            principal=who, site_id=self.site_id, now=datetime.now(UTC)
+        )
+        if requested_site != self.site_id:
+            self.authz_service.require_view_site_execution(
+                principal=who, site_id=requested_site, now=datetime.now(UTC)
+            )
+            raise RosterSiteUnavailable()
 
     def worker_view(self, payload: str) -> dict[str, Any]:
         now = datetime.now(UTC)
@@ -803,7 +925,7 @@ class AadeshApplication:
     def cedar_supervisor_acknowledge(
         self, worker_id: str, *, principal: Principal | None = None
     ) -> dict[str, Any]:
-        who = principal or self.principal("supervisor")
+        who = self._require_principal(principal, demo_role="supervisor")
         parchis = self.store.for_worker(worker_id)
         payload = None
         for parchi in parchis:
@@ -847,9 +969,30 @@ class AadeshApplication:
         if not parchis:
             return {"error": "Open the standing order first so a parchi exists."}
         parchi = parchis[0]
-        facilitator = principal or self.principal("facilitator")
+        facilitator = self._require_principal(principal, demo_role="facilitator")
 
-        consent = self._granted_consent(parchi, worker_id, now, facilitator.principal_id)
+        # Prefer a real, worker-granted consent if one exists; otherwise evaluate against the
+        # UNGRANTED request state, which Cedar denies on `consentGranted == false`. The screen
+        # therefore reports whatever is actually true right now -- no consent, a live consent,
+        # or a consent the worker has since revoked.
+        live = self._live_consent(
+            parchi_id=parchi.parchi_id,
+            worker_id=worker_id,
+            facilitator_id=facilitator.principal_id,
+            now=now,
+        )
+        consent = (
+            live
+            if live is not None
+            else request_assistance(
+                context_id="consent-demo-request",
+                parchi_id=parchi.parchi_id,
+                worker_id=worker_id,
+                facilitator_id=self.facilitator_id,
+                requested_at=now,
+                ttl=CONSENT_TTL,
+            )
+        )
         allowed: dict[str, Any] = {}
         try:
             decision = self.authz_service.require_assist_claim(
@@ -911,18 +1054,161 @@ class AadeshApplication:
             "ungranted_consent_attempt": ungranted,
         }
 
-    def _granted_consent(
-        self, parchi: Parchi, worker_id: str, now: datetime, facilitator_id: str | None = None
-    ) -> ClaimAssistanceContext:
-        return grant_consent(
-            context_id="consent-demo-001",
-            parchi_id=parchi.parchi_id,
-            worker_id=worker_id,
-            facilitator_id=facilitator_id or self.facilitator_id,
-            granted_at=now,
-            ttl=CONSENT_TTL,
-            actor_worker_id=worker_id,
+    def grant_consent(
+        self,
+        parchi_id: str,
+        worker_id: str,
+        now: datetime | None = None,
+        facilitator_id: str | None = None,
+        actor_worker_id: str | None = None,
+    ) -> dict[str, Any]:
+        """Grant consent for a worker to allow a facilitator to assist with their claim.
+
+        Only the worker themselves may grant consent -- the core's identity rule, checked here
+        against `actor_worker_id`. On AWS that argument is the authenticated principal's own
+        identity, never the id in the request body, so naming a worker is not enough to grant
+        for them. Locally it defaults to `worker_id`, which is the demonstration identity.
+
+        The referenced Parchi must exist and belong to the named worker, so a grant cannot be
+        minted for a claim the worker does not own. The grant is persisted BEFORE success is
+        reported; on AWS that write is conditional, so a concurrent revocation wins over a
+        grant formed before it.
+        """
+        now = now or datetime.now(UTC)
+        actor = actor_worker_id or worker_id
+        parchi = self.store.get(parchi_id)
+        if parchi is None:
+            raise ConsentRefused("The referenced Parchi does not exist.")
+        if parchi.worker_id != worker_id:
+            raise ConsentRefused("The referenced Parchi does not belong to this worker.")
+        try:
+            consent = grant_consent(
+                # The client may retain this locator briefly to offer revocation after a route
+                # reload. Keep it opaque so client storage does not encode worker/Parchi IDs.
+                context_id=f"consent-{secrets.token_urlsafe(24)}",
+                parchi_id=parchi_id,
+                worker_id=worker_id,
+                facilitator_id=facilitator_id or self.facilitator_id,
+                granted_at=now,
+                ttl=CONSENT_TTL,
+                actor_worker_id=actor,
+            )
+        except ValueError as exc:
+            # The domain refused: the actor is not the worker. Report a stable, safe denial
+            # rather than the domain's sentence, which is written for a developer.
+            raise ConsentRefused(
+                "Only the worker named on the Parchi may grant consent for their own claim."
+            ) from exc
+        self._persist_grant(consent, actor=actor)
+        return consent_dict(consent)
+
+    def _persist_grant(self, consent: ClaimAssistanceContext, *, actor: str) -> None:
+        """Write a grant to whichever store is installed, compare-and-set when it is durable."""
+        if self._consent_store is None:
+            self._consents[consent.context_id] = consent
+            return
+        current = self._consent_store.load(
+            worker_id=consent.worker_id,
+            facilitator_id=consent.facilitator_id,
+            parchi_id=consent.parchi_id,
         )
+        expected = current.version if current is not None else 0
+        self._consent_store.save(consent, expected_version=expected, actor_id=actor)
+
+    def revoke_consent(
+        self,
+        context_id: str,
+        now: datetime | None = None,
+        actor_worker_id: str | None = None,
+    ) -> dict[str, Any]:
+        """Revoke a previously granted consent.
+
+        Revocation is recorded, not deleted: `consent_granted` stays True so a revoked consent
+        is still distinguishable from one that was never granted. The next `/api/assist` finds
+        no LIVE consent and denies.
+
+        On AWS `actor_worker_id` is the authenticated principal's identity. It must be the
+        worker named on the consent; there is no other, explicitly authorized revocation
+        mechanism in this codebase, so anything else is refused rather than guessed at.
+        """
+        now = now or datetime.now(UTC)
+        if self._consent_store is not None:
+            return self._revoke_durable(context_id, now=now, actor_worker_id=actor_worker_id)
+        if context_id not in self._consents:
+            raise ConsentRefused("No consent found for this reference.")
+        stored = self._consents[context_id]
+        if actor_worker_id is not None and actor_worker_id != stored.worker_id:
+            raise ConsentRefused("Only the worker named on the consent may revoke it.")
+        revoked = _revoke_consent(stored, now=now)
+        self._consents[context_id] = revoked
+        return consent_dict(revoked)
+
+    def _revoke_durable(
+        self, context_id: str, *, now: datetime, actor_worker_id: str | None
+    ) -> dict[str, Any]:
+        stored = self._consent_store.get(context_id)
+        if stored is None:
+            raise ConsentRefused("No consent found for this reference.")
+        worker_id = stored.consent.worker_id
+        if actor_worker_id is not None and actor_worker_id != worker_id:
+            raise ConsentRefused("Only the worker named on the consent may revoke it.")
+        revoked = _revoke_consent(stored.consent, now=now)
+        try:
+            result = self._consent_store.save(
+                revoked, expected_version=stored.version, actor_id=actor_worker_id or worker_id
+            )
+        except ConsentStoreConflict:
+            # Somebody changed the record first. Revocation is idempotent: if it is already
+            # revoked, this is a success; otherwise refuse rather than overwrite a newer
+            # decision. Either way a revoked consent cannot be made live by this call.
+            current = self._consent_store.get(context_id)
+            if current is not None and current.consent.revoked_at is not None:
+                return consent_dict(current.consent)
+            raise
+        return consent_dict(result.consent)
+
+    def _live_consent(
+        self,
+        *,
+        parchi_id: str,
+        worker_id: str,
+        facilitator_id: str,
+        now: datetime,
+    ) -> ClaimAssistanceContext | None:
+        """The STORED consent that currently authorizes this facilitator for this claim.
+
+        Returned only when it names the same worker and facilitator, was granted by the worker,
+        has not been revoked, and has not expired at `now`. This is the lookup that makes
+        revocation and expiry actually bite: assistance is authorized against a consent that
+        was created earlier by the worker, never against one minted on the spot.
+
+        When a durable store is installed this reads it on EVERY call. There is deliberately no
+        cached decision here: a cached "allowed" is exactly what would keep a revoked consent
+        effective for the rest of a warm Lambda's life.
+        """
+        if self._consent_store is not None:
+            try:
+                return self._consent_store.find_live(
+                    worker_id=worker_id,
+                    facilitator_id=facilitator_id,
+                    parchi_id=parchi_id,
+                    now=now,
+                )
+            except Exception:
+                # A consent-store outage is not an authorization. Fail closed: the caller
+                # denies, and no view is built from a decision we could not actually read.
+                return None
+        for consent in self._consents.values():
+            if (
+                consent.parchi_id == parchi_id
+                and consent.worker_id == worker_id
+                and consent.facilitator_id == facilitator_id
+                and consent.consent_granted
+                and consent.revoked_at is None
+                and consent.granted_at <= now < consent.expires_at
+            ):
+                return consent
+        return None
 
     def assist(
         self, *, worker_id: str, parchi_id: str, principal: Principal | None = None
@@ -932,8 +1218,26 @@ class AadeshApplication:
         parchi = self.store.get(parchi_id)
         if parchi is None:
             return {"allowed": False, "reason": "Parchi not found."}
-        facilitator = principal or self.principal("facilitator")
-        consent = self._granted_consent(parchi, worker_id, now, facilitator.principal_id)
+        facilitator = self._require_principal(principal, demo_role="facilitator")
+        # The consent must already EXIST and still be live. It is looked up, never minted here:
+        # only `/api/consent/grant`, whose actor must be the worker, creates one. That is what
+        # makes "revoked or expired consent blocks assistance" true rather than decorative.
+        consent = self._live_consent(
+            parchi_id=parchi_id,
+            worker_id=worker_id,
+            facilitator_id=facilitator.principal_id,
+            now=now,
+        )
+        if consent is None:
+            return {
+                "attempted": ASSIST_CLAIM,
+                "allowed": False,
+                "policy_id": "assist-requires-live-consent",
+                "reason": (
+                    "No live worker-granted consent for this claim. A facilitator may assist "
+                    "only while the worker's consent is granted, unrevoked and unexpired."
+                ),
+            }
         try:
             self.authz_service.require_assist_claim(principal=facilitator, consent=consent, now=now)
             view = assist_claim(
@@ -1017,7 +1321,7 @@ class AadeshApplication:
             authorization=self.authz_service, model=model, audit=self.audit
         )
         outcome = service.explain_site(
-            principal=principal or self.principal("supervisor"),
+            principal=self._require_principal(principal, demo_role="supervisor"),
             result=result,
             now=datetime.now(UTC),
         )

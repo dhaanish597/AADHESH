@@ -1,158 +1,114 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
-import { ErrorNote, IconLock, IconShield, KeyValue, Loading, Panel, Pill } from "@/components/ui";
-import { getJson } from "@/lib/api";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { ErrorNote, Loading } from "@/components/ui";
+import { SiteSceneExplorer } from "@/components/SiteSceneExplorer";
+import { getJson, failureOf } from "@/lib/api";
 import { formatInstant } from "@/lib/format";
 import type { FacilitatorPayload } from "@/lib/types";
+
+type Station = "consent" | "summary" | "requirements" | "source" | "outcome";
+const STATIONS: { id: Station; number: string; title: string; detail: string }[] = [
+  { id: "consent", number: "01", title: "Consent", detail: "Authorization check" },
+  { id: "summary", number: "02", title: "Case summary", detail: "Redacted view" },
+  { id: "requirements", number: "03", title: "Requirements", detail: "Not returned" },
+  { id: "source", number: "04", title: "Source guidance", detail: "Not returned" },
+  { id: "outcome", number: "05", title: "Outcome", detail: "No write action" },
+];
 
 export default function FacilitatorPage() {
   const [data, setData] = useState<FacilitatorPayload | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [station, setStation] = useState<Station>("consent");
+  const [lastChecked, setLastChecked] = useState<string | null>(null);
+  const requestId = useRef(0);
+  const view = data?.assistance?.view;
+  const allowed = Boolean(data?.assistance?.allowed && view);
+  const demo = process.env.NEXT_PUBLIC_AADESH_DEMO === "1";
 
-  const load = useCallback(async () => {
+  const refresh = useCallback(async () => {
+    const currentRequest = ++requestId.current;
+    setData(null); // remove formerly permitted data before checking current authorization
+    setBusy(true);
     setError(null);
     try {
-      setData(await getJson<FacilitatorPayload>("/api/facilitator"));
+      const result = await getJson<FacilitatorPayload>("/api/facilitator");
+      if (currentRequest === requestId.current) { setData(result); setLastChecked(new Date().toISOString()); }
     } catch (err) {
-      setError((err as Error).message);
-    }
+      if (currentRequest === requestId.current) { setData(null); setError(failureOf(err).message); }
+    } finally { if (currentRequest === requestId.current) setBusy(false); }
   }, []);
 
+  useEffect(() => { void refresh(); }, [refresh]);
   useEffect(() => {
-    void load();
-  }, [load]);
+    if (!allowed) return;
+    const id = window.setInterval(() => { if (document.visibilityState === "visible") void refresh(); }, 30_000);
+    const expiresAt = data?.assistance?.view?.consent_expires_at;
+    const expiryTimer = expiresAt ? window.setTimeout(() => void refresh(), Math.max(0, Date.parse(expiresAt) - Date.now())) : undefined;
+    const onVisibility = () => { if (document.visibilityState === "visible") void refresh(); };
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => { window.clearInterval(id); if (expiryTimer) window.clearTimeout(expiryTimer); document.removeEventListener("visibilitychange", onVisibility); };
+  }, [allowed, data?.assistance?.view?.consent_expires_at, refresh]);
 
-  const view = data?.assistance?.view;
+  const denial = data?.assistance?.reason || data?.error || (demo ? "The demonstration API has no worker-granted consent for this request." : "No currently authorized assistance request was returned.");
 
-  return (
-    <div className="mx-auto max-w-4xl px-5 py-8 lg:px-10 lg:py-10">
-      <header className="border-b border-line pb-5">
-        <div className="label">Facilitator · local demonstration</div>
-        <h1 className="mt-1 font-mono text-xl font-semibold tracking-tight">
-          Help with a claim, without the worker&apos;s record
-        </h1>
-        <p className="mt-2 max-w-2xl text-sm leading-relaxed text-dim">
-          This local preview demonstrates a redacted assistance decision and its access limits.
-          It does not collect live worker consent: this demo has no authenticated worker session.
-          In a deployed workflow, only the worker may grant or revoke time-limited consent.
-        </p>
-      </header>
+  return <main className="assist-shell">
+    <header className="assist-header">
+      <div className="assist-brand"><span className="assist-mark">A</span><span>AADHESH <i>/ ASSISTANCE STUDIO</i></span></div>
+      <div className="assist-header-state"><span className={allowed ? "assist-dot is-authorized" : "assist-dot"} />{allowed ? "AUTHORIZED VIEW" : "CONSENT REQUIRED"}</div>
+    </header>
 
-      <section className="mt-5 border border-line bg-panel p-4" aria-labelledby="consent-lifecycle-title">
-        <div className="label">Worker-controlled access</div>
-        <h2 id="consent-lifecycle-title" className="mt-1 text-base font-semibold text-ink">Consent has a clear end</h2>
-        <ol className="mt-4 grid gap-px border border-line bg-line sm:grid-cols-2 lg:grid-cols-4">
-          {[
-            ["01 · REQUEST", "Ask for assistance", "A request gives the facilitator no access."],
-            ["02 · WORKER CHOICE", "Worker grants consent", "Only the named worker can grant it."],
-            ["03 · LIMITED WINDOW", "Assist with one claim", "Cedar permits a redacted claim view only while consent is valid."],
-            ["04 · REVOKED OR EXPIRED", "Access ends", "Withdrawal or expiry denies further assistance."],
-          ].map(([step, title, body]) => (
-            <li key={step} className="bg-panelAlt p-3">
-              <span className="data text-[10px] text-accent">{step}</span>
-              <strong className="mt-1 block text-sm text-ink">{title}</strong>
-              <p className="mt-1 text-xs leading-relaxed text-dim">{body}</p>
-            </li>
-          ))}
-        </ol>
-        <p className="mt-3 text-xs text-faint">This page shows a local authorization demonstration; its sample grant is not a worker’s live consent.</p>
-      </section>
+    <section className="assist-intro">
+      <div><p className="label">FACILITATOR WORKSPACE / ASSISTANCE ONLY</p><h1>Help move one step forward.</h1><p>Review only the case fields the backend permits. The worker keeps control of their Parchi and consent.</p></div>
+      <button type="button" className="assist-refresh" onClick={() => void refresh()} disabled={busy} aria-label="Recheck authorization"><span aria-hidden="true">↻</span> Recheck access</button>
+    </section>
 
-      {error && <div className="mt-5"><ErrorNote>{error}</ErrorNote></div>}
-      {!data && !error && <Loading label="Building the redacted assist view" />}
-
-      {data && (
-        <div className="mt-6 space-y-6">
-          {data.error ? (
-            <Panel title="No demonstration record yet" subtitle="The facilitator view does not create a Standing Order or Parchi when opened.">
-              <p className="text-sm text-dim">{data.error}</p>
-              <a href="/supervisor" className="mt-4 inline-flex border border-lineStrong bg-panelAlt px-3 py-2 text-sm text-ink hover:border-accent">Open supervisor demonstration ↗</a>
-            </Panel>
-          ) : (
-            <>
-          <Panel
-            title="AssistClaim — redacted demo view"
-            subtitle="Seeded consent scenario · Cedar decision is real · worker consent is not live or user-granted."
-            actions={<Pill tone="warn">Simulated consent</Pill>}
-          >
-            {view ? (
-              <>
-                <dl>
-                <KeyValue k="Claim status">{view.claim_status}</KeyValue>
-                <KeyValue k="Consent">{view.consent_status} · demo fixture</KeyValue>
-                <KeyValue k="Granted">{formatInstant(view.consent_granted_at)}</KeyValue>
-                <KeyValue k="Expires">{formatInstant(view.consent_expires_at)}</KeyValue>
-                </dl>
-                <details className="mt-4 border-t border-line pt-3">
-                  <summary className="cursor-pointer text-xs text-dim">Technical references</summary>
-                  <dl className="mt-3">
-                    <KeyValue k="Context">{view.context_id}</KeyValue>
-                    <KeyValue k="Parchi reference">{view.parchi_id}</KeyValue>
-                    <KeyValue k="Worker reference">{view.worker_id}</KeyValue>
-                    <KeyValue k="Site reference">{view.site_id}</KeyValue>
-                  </dl>
-                </details>
-              </>
-            ) : (
-              <p className="text-sm text-dim">{data.assistance?.reason ?? "No assistance view."}</p>
-            )}
-            <div className="mt-4 grid gap-2 text-xs text-faint sm:grid-cols-3">
-              {[
-                "No worker name",
-                "No phone number",
-                "No Aadhaar",
-                "No bank details",
-                "No full Parchi",
-                "No raw QR token",
-              ].map((x) => (
-                <span key={x} className="flex items-center gap-1.5">
-                  <IconLock className="h-3 w-3 text-faint" /> {x}
-                </span>
-              ))}
-            </div>
-          </Panel>
-
-          <div className="grid gap-4 lg:grid-cols-2">
-            <DecisionCard
-              title="Facilitator attempts ViewParchi"
-              decision={data.read_attempt}
-            />
-            <DecisionCard
-              title="AssistClaim with a consent never granted"
-              decision={data.ungranted_consent_attempt}
-            />
-          </div>
-          <p className="text-xs leading-relaxed text-faint">The access decision and redaction rules are exercised through the backend authorization service. Consent grant, expiry and revocation are enforced by the core model; this preview does not let a facilitator create or revoke a worker&apos;s consent.</p>
-            </>
-          )}
+    <div className="assist-workspace">
+      <aside className="assist-queue" aria-label="Assistance request queue">
+        <div className="assist-queue-heading"><div><span className="label">REQUEST QUEUE</span><h2>Current access</h2></div><span className="assist-queue-count">{allowed ? "01" : "00"}</span></div>
+        <div className={`assist-case ${allowed ? "is-selected" : "is-denied"}`} aria-current="true">
+          <div className="assist-case-icon" aria-hidden="true">{allowed ? "↗" : "—"}</div><div><strong>{allowed ? "Permitted case" : "No permitted case"}</strong><small>{allowed ? "Redacted assistance scope" : "No protected case details"}</small></div><span className="assist-case-status">{allowed ? "OPEN" : "WAIT"}</span>
         </div>
-      )}
+        {!allowed && <p className="assist-queue-note">The API provides a single current request, not a browsable queue. No worker or Parchi identifiers are shown before access is permitted.</p>}
+        <div className="assist-queue-foot"><span>SERVER DECISION</span><b>{allowed ? "ALLOW" : data ? "DENY" : "PENDING"}</b></div>
+      </aside>
+
+      <section className="assist-main" aria-label="Guided assistance workflow">
+        <div className="assist-scene-heading"><div><span className="label">GUIDED WORKSPACE</span><h2>Assistance pathway</h2></div><span className="assist-time">{lastChecked ? `CHECKED ${formatInstant(lastChecked)}` : "CHECKING…"}</span></div>
+        <p className="assist-quiet">Illustrative site context only. No site survey, zone-level rule, or authorized case is implied by this geometry.</p>
+        <SiteSceneExplorer title="Illustrative site context" label="SITE CONTEXT / 3D MODEL" />
+        <div className="assist-stations" role="group" aria-label="Assistance stages">
+          {STATIONS.map((item, i) => <button type="button" key={item.id} onClick={() => setStation(item.id)} aria-pressed={station === item.id} className={station === item.id ? "is-active" : ""}>
+            <span className="assist-station-number">{item.number}</span><b>{item.title}</b><small>{item.detail}</small>{i < STATIONS.length - 1 && <span className="assist-station-link" aria-hidden="true">···</span>}
+          </button>)}
+        </div>
+
+        <div className="assist-detail">
+          <div className="assist-detail-kicker"><span className="label">{STATIONS.find((item) => item.id === station)?.number} / {STATIONS.find((item) => item.id === station)?.title}</span><span className={`assist-permission ${allowed ? "is-allowed" : ""}`}>{allowed ? "PERMITTED" : "NOT PERMITTED"}</span></div>
+          {busy && !data ? <Loading label="Checking worker consent with the authorization service" /> : error ? <div className="assist-error"><ErrorNote>{error}</ErrorNote><button type="button" onClick={() => void refresh()}>Retry authorization check</button></div> : !data ? <p className="assist-quiet">Waiting for authorization response…</p> : !allowed ? <div className="assist-denial" role="status"><span className="assist-denial-symbol" aria-hidden="true">!</span><div><h3>Worker consent is required</h3><p>{denial}</p><p className="assist-quiet">Ask the worker to open their own Parchi and choose whether to allow assistance. Facilitators cannot grant consent.</p></div></div> : <AllowedStation station={station} view={view!} />}
+        </div>
+
+        <p className="assist-boundary"><span aria-hidden="true">◈</span> Consent is checked by the backend on each refresh. When it is revoked or expires, this workspace clears the previous view before requesting access again.</p>
+      </section>
     </div>
-  );
+    <footer className="assist-footer"><span>ASSISTANCE STUDIO</span><span>NO FULL PARCHI · NO PROXY ACKNOWLEDGEMENT · NO CLAIM FILING</span></footer>
+  </main>;
 }
 
-function DecisionCard({
-  title,
-  decision,
-}: {
-  title: string;
-  decision?: FacilitatorPayload["read_attempt"];
-}) {
-  if (!decision) return null;
-  const denied = !decision.allowed;
-  return (
-    <Panel title={title} actions={<Pill tone={denied ? "danger" : "ok"}>{denied ? "Denied" : "Allowed"}</Pill>}>
-      <div className="flex items-start gap-2">
-        <IconShield className={`mt-0.5 h-4 w-4 shrink-0 ${denied ? "text-danger" : "text-success"}`} />
-        <div>
-          <p className="data text-[12px] text-faint">action: {decision.attempted}</p>
-          <p className="mt-1 text-sm text-ink">{decision.reason}</p>
-          {decision.policy_id && (
-            <p className="data mt-2 text-[11px] text-faint">deciding policy: {decision.policy_id}</p>
-          )}
-        </div>
-      </div>
-    </Panel>
-  );
+function AllowedStation({ station, view }: { station: Station; view: NonNullable<NonNullable<FacilitatorPayload["assistance"]>["view"]> }) {
+  if (station !== "summary") {
+    const notices: Record<Exclude<Station, "summary">, { title: string; body: string }> = {
+      consent: { title: "Consent validated", body: "The backend returned a permitted, time-limited assistance view. The grant time and expiry below come from the server." },
+      requirements: { title: "Requirement details are unavailable", body: "The facilitator response does not include missing documentation or requirement statuses. No checklist can be completed here." },
+      source: { title: "Source citations are unavailable", body: "This redacted facilitator response includes no official citations or source excerpts. Open the worker’s own Parchi with them for source review." },
+      outcome: { title: "No completion operation is available", body: "There is no facilitator action endpoint for recording assistance completion or claim outcomes. This screen does not simulate one." },
+    };
+    const message = notices[station];
+    return <div className="assist-capability"><span className="assist-capability-mark" aria-hidden="true">{station === "consent" ? "✓" : "—"}</span><div><h3>{message.title}</h3><p>{message.body}</p></div></div>;
+  }
+  return <div className="assist-summary"><div className="assist-summary-intro"><div className="assist-redacted-avatar" aria-hidden="true">◌</div><div><span className="label">BACKEND-REDACTED CASE VIEW</span><h3>Permitted case summary</h3></div></div>
+    <dl><div><dt>Claim status</dt><dd>{view.claim_status}</dd></div><div><dt>Consent status</dt><dd>{view.consent_status}</dd></div><div><dt>Granted</dt><dd>{formatInstant(view.consent_granted_at)}</dd></div><div><dt>Expires</dt><dd>{formatInstant(view.consent_expires_at)}</dd></div></dl>
+    <p className="assist-quiet">Personal identity, phone, Aadhaar, bank details, full Parchi, obligation list and source quotations are not part of this view.</p>
+  </div>;
 }

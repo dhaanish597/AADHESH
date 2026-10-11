@@ -50,6 +50,12 @@ def publish_stage_invocation(
     one: a test must be able to exercise the publish decision without boto3 and without
     touching a real event bus.
     """
+    if scenario != "current":
+        return {
+            "published": False,
+            "code": "OPERATIONAL_WRITE_DENIED",
+            "reason": "Historical replay cannot publish an operational StageInvocation.",
+        }
     detail: dict[str, Any] = {
         "order_id": order_id,
         "site_id": site_id,

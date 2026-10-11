@@ -40,8 +40,18 @@ services/aadesh_aws/cedar/
 # Only scratch artefacts are ignored.
 corpus/sources/.tamper-scratch/
 corpus/sources/**/*.partial
+corpus/incoming_sources/
+
+# --- Static frontend deploy artifacts ---
+web/out/
+*.tmp.json
+/CUsers*
 
 # --- Local scratch ---
+.playwright-mcp/
+web/test-results/
+web/playwright-report/
+web/.playwright/
 .DS_Store
 Thumbs.db
 *.log

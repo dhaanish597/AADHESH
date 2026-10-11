@@ -1,0 +1,34 @@
+{
+  "headers": {
+    "x-nextjs-stale-time": "300",
+    "x-nextjs-prerender": "1",
+    "x-next-cache-tags": "_N_T_/layout,_N_T_/parchi/layout,_N_T_/parchi/page,_N_T_/parchi"
+  },
+  "segmentPaths": [
+    "/_tree",
+    "/_full",
+    "/parchi/__PAGE__"
+  ],
+  "prefetchHints": {
+    "hints": 64,
+    "slots": {
+      "children": {
+        "hints": 96,
+        "slots": {
+          "children": {
+            "hints": 160,
+            "slots": null
+          }
+        }
+      }
+    }
+  },
+  "routeCache": {
+    "key": "/route-cache/APP_PAGE/72b4c120fc1e25cd3b1f0794153f8e2cd0cce1cc65d28aff7d1cf263ff29b6ca/$/parchi",
+    "owner": {
+      "kind": "APP_PAGE",
+      "sourceRoute": "/parchi/page"
+    },
+    "isFallback": false
+  }
+}

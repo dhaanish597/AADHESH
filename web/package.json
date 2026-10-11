@@ -7,23 +7,27 @@
     "build": "next build",
     "start": "next start",
     "typecheck": "tsc --noEmit",
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "e2e": "playwright test",
+    "test:scene": "node --experimental-strip-types tests/site-scene-engine.mjs"
   },
   "dependencies": {
-    "@phosphor-icons/react": "^2.1.10",
     "@tailwindcss/postcss": "^4.3.3",
-    "next": "^15.5.27",
+    "next": "^16.4.0",
     "qrcode": "^1.5.4",
     "qrcode.react": "^4.2.0",
     "react": "^19.1.0",
-    "react-dom": "^19.1.0"
+    "react-dom": "^19.1.0",
+    "three": "^0.186.1"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.0",
+    "@playwright/test": "^1.64.0",
     "@types/node": "^22.10.0",
     "@types/qrcode": "^1.5.5",
     "@types/react": "^19.1.0",
     "@types/react-dom": "^19.1.0",
+    "@types/three": "^0.186.0",
     "autoprefixer": "^10.4.20",
     "eslint": "^10.0.0",
     "eslint-plugin-react-hooks": "^7.1.1",

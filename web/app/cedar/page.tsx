@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { Button, ErrorNote, IconLock, IconShield, KeyValue, Loading, Panel, Pill } from "@/components/ui";
 import { postJson } from "@/lib/api";
 import type { CedarDecision } from "@/lib/types";
@@ -11,29 +11,21 @@ export default function CedarPage() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
-  const prepare = useCallback(async () => {
-    setError(null);
-    try {
-      await postJson("/api/standing-order", { scenario: "replay" });
-      setReady(true);
-    } catch (err) {
-      setError((err as Error).message);
-    }
-  }, []);
-
   useEffect(() => {
-    void prepare();
-  }, [prepare]);
+    setReady(true);
+  }, []);
 
   const attempt = async () => {
     setBusy(true);
     setError(null);
     try {
-      setDecision(
-        await postJson<CedarDecision>("/api/cedar/supervisor-acknowledge", {
-          worker_id: "worker-002",
-        }),
-      );
+      // ALWAYS ask the real backend. The decision and its sentence come from the actual Cedar
+      // evaluation and the shipped denial mapping -- never from a hard-coded frontend result.
+      // If no Parchi exists yet the backend says so, and that honest answer is what we show.
+      const decision = await postJson<CedarDecision>("/api/cedar/supervisor-acknowledge", {
+        worker_id: "worker-002",
+      });
+      setDecision(decision);
     } catch (err) {
       setError((err as Error).message);
     } finally {
@@ -61,10 +53,10 @@ export default function CedarPage() {
       <Panel
         className="mt-6"
         title="A supervisor attempts to acknowledge a worker's Parchi"
-        subtitle="Principal: supervisor-001 (role: supervisor) · action: AcknowledgeOwnParchi"
-      >
+        subtitle="          Principal: supervisor-001 (role: supervisor) · action: AcknowledgeOwnParchi"
+        >
         <dl className="mb-4">
-          <KeyValue k="Resource">Parchi for worker-002 (pending acknowledgement)</KeyValue>
+          <KeyValue k="Resource">Parchi for worker-002</KeyValue>
           <KeyValue k="Policy">@id(“no-proxy-acknowledgement”)</KeyValue>
         </dl>
         <Button onClick={attempt} disabled={!ready || busy} variant="danger">
@@ -78,7 +70,7 @@ export default function CedarPage() {
             {decision.allowed ? (
               <Pill tone="ok">Allowed</Pill>
             ) : (
-              <div className="border border-danger/50 bg-danger/10 p-4">
+              <div className="denial-panel" role="alert">
                 <div className="flex items-center gap-2">
                   <IconShield className="h-5 w-5 text-danger" />
                   <span className="data text-sm font-bold uppercase tracking-[0.14em] text-danger">
@@ -86,6 +78,7 @@ export default function CedarPage() {
                   </span>
                 </div>
                 <p className="mt-2 text-sm text-ink">{decision.reason}</p>
+                <p className="mt-4 text-sm">The worker must scan their own parchi and confirm it themselves.</p>
                 {decision.policy_id && (
                   <p className="data mt-2 text-[11px] text-faint">
                     deciding policy: {decision.policy_id}

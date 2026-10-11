@@ -28,13 +28,14 @@ const plexMono = IBM_Plex_Mono({
 });
 
 export const metadata: Metadata = {
+  metadataBase: new URL(process.env.NEXT_PUBLIC_LIVE_URL ?? "https://main.d1vf2zepthltbu.amplifyapp.com"),
   title: {
     default: "AADHESH — Environmental operations",
     template: "%s — AADHESH",
   },
   description:
     "From environmental order to verified action. AADHESH connects official restrictions, site obligations and worker acknowledgement through a verifiable evidence trail.",
-  manifest: "/manifest.json",
+  manifest: "/manifest.webmanifest",
   icons: {
     icon: "/icon.svg",
     apple: "/icon.svg",

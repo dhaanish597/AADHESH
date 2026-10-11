@@ -1,3 +1,5 @@
+import path from "node:path";
+
 /** @type {import('next').NextConfig} */
 
 // The frontend never imports the deterministic core directly. It talks to an HTTP API, which is
@@ -12,11 +14,15 @@
 //     rewrite that silently does nothing would be worse than none.
 const API = process.env.AADESH_API_URL ?? "http://127.0.0.1:8787";
 const STATIC_EXPORT = process.env.AADHESH_STATIC_EXPORT === "1";
+const REPO_ROOT = path.resolve(process.cwd(), "..");
 
 const nextConfig = {
-  // This repo has more than one lockfile; pin the tracing root to the web app. Scoped here so
-  // Next does not stray into the parent workspace when collecting build traces.
-  outputFileTracingRoot: process.cwd(),
+  // Root both Turbopack resolution and file tracing at the repo because the web app imports two
+  // small source manifests from sibling directories.
+  outputFileTracingRoot: REPO_ROOT,
+  // The UI reads the authoritative manifest and Cedar denial copy from the repo root.
+  // Next 16/Turbopack otherwise treats those valid sibling imports as outside its root.
+  turbopack: { root: REPO_ROOT },
   // Allow isolated local verification builds while the normal .next dev server is running.
   distDir: process.env.AADHESH_NEXT_DIST_DIR ?? ".next",
   ...(STATIC_EXPORT
@@ -32,10 +38,6 @@ const nextConfig = {
           return [{ source: "/api/:path*", destination: `${API}/api/:path*` }];
         },
       }),
-  experimental: {
-    // Keep dev builds fast: don't eagerly transpile all 9000+ Phosphor modules.
-    optimizePackageImports: ["@phosphor-icons/react"],
-  },
 };
 
 export default nextConfig;

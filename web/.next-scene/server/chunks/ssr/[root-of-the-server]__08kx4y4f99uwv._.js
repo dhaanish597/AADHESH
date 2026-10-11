@@ -1,0 +1,3 @@
+module.exports=[[760,(a,b,c)=>{b.exports=a.r(18622)},80516,(a,b,c)=>{b.exports=a.r(760).vendored["react-rsc"].ReactJsxRuntime},261,(a,b,c)=>{b.exports=a.r(760).vendored["react-rsc"].ReactServerDOMTurbopackServer}],18622,(a,b,c)=>{b.exports=a.x("next/dist/compiled/next-server/app-page-turbo.runtime.prod.js",()=>require("next/dist/compiled/next-server/app-page-turbo.runtime.prod.js"))}];
+
+//# sourceMappingURL=%5Broot-of-the-server%5D__08kx4y4f99uwv._.js.map

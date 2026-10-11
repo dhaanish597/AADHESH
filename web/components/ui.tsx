@@ -172,7 +172,7 @@ export function Button({
 }) {
   const styles: Record<string, string> = {
     primary:
-      "border-accent bg-accent text-black hover:bg-amber-400 disabled:opacity-40",
+      "border-accent bg-accent text-white hover:bg-blue-700 disabled:opacity-40",
     secondary: "border-lineStrong bg-panelAlt text-ink hover:border-accent hover:text-accent",
     danger: "border-danger bg-danger/15 text-danger hover:bg-danger/25",
     ghost: "border-transparent text-dim hover:text-ink",
